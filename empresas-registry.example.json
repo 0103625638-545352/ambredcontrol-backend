@@ -1,0 +1,20 @@
+[
+  {
+    "id": "principal",
+    "nombre": "Mi Negocio de Ejemplo",
+    "databaseUrl": "postgresql://postgres:tu_password@localhost:5432/facturacion_principal",
+    "ruc": "1234567890001",
+    "razonSocial": "MI NEGOCIO DE EJEMPLO",
+    "direccionMatriz": "Av. Siempre Viva 123, Quito",
+    "ambienteSri": "1",
+    "establecimiento": "001",
+    "puntoEmision": "001",
+    "obligadoContabilidad": false,
+    "certificadoP12Path": "./certificado.p12",
+    "certificadoP12Password": "tu_password_del_certificado",
+    "carpetaUploads": "uploads",
+    "carpetaComprobantes": "comprobantes-autorizados",
+    "activa": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  }
+]

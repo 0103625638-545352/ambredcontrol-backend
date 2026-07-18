@@ -1,0 +1,1875 @@
+// Este archivo define la "forma" de tu base de datos usando el lenguaje de Prisma.
+// Prisma lee este archivo y genera automáticamente el cliente de TypeScript
+// que usarás para consultar la base de datos sin escribir SQL a mano.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // La URL real vive en el archivo .env, nunca aquí
+}
+
+// --- Lección de hoy: solo el módulo de INVENTARIO ---
+// Vamos a construir esto primero porque no depende del SRI y puedes probarlo ya.
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String
+  activo    Boolean    @default(true)
+  productos Producto[] // una categoría tiene muchos productos
+  createdAt DateTime   @default(now())
+}
+
+model Producto {
+  id                  Int      @id @default(autoincrement())
+  // Autogenerado ("PROD-00001", ver utils/codigoProducto.ts) — ya NO se
+  // escribe a mano al crear un producto: es la clave de negocio, se
+  // serializa en el XML del SRI, nunca se edita después. El contador que lo
+  // arma vive en ContadorProducto (mismo patrón atómico que Secuencial para
+  // los comprobantes, pero sin ningún significado legal — es puramente
+  // interno del inventario).
+  codigo              String   @unique
+  codigoBarras        String?  @unique // EAN-13/UPC-A/Code128 real de fábrica, opcional y editable — distinto del código interno
+  nombre              String
+  // Fabricante (ej. "Mikrotik", "TP-Link", "Hikvision", "Ubiquiti") —
+  // separado de "modelo" a propósito: permite filtrar/buscar por marca sin
+  // depender de que el modelo la repita en el texto. Opcional, editable.
+  marca               String?
+  // Modelo del fabricante (ej. "TP-Link Archer C6", "Hikvision DS-2CE16D0T",
+  // "Mikrotik RB750Gr3") — útil en un ISP donde varios productos comparten
+  // "nombre" genérico (ej. "Router") pero son modelos distintos. Opcional,
+  // editable, sin ningún significado legal (a diferencia de "codigo").
+  modelo              String?
+  descripcion         String?
+  imagenUrl           String? // ruta relativa servida por el backend, ej. "/uploads/productos/producto-3-169...jpg"
+  ivaPorcentaje       Decimal  @default(15.00) @db.Decimal(5, 2)
+  // Costo promedio ponderado corriente, actualizado en cada compra y cada
+  // devolución a proveedor (ver utils/costeoInventario.ts) — null hasta la
+  // primera compra real (un producto creado con stock inicial manual no
+  // tiene costo conocido, y por lo tanto no tiene ningún precio de venta
+  // calculable — ver utils/precios.ts — hasta su primera compra real).
+  // Escala (14,6), más precisa que la convención (10,2) de los campos de
+  // dinero visibles: es un acumulador que se recalcula muchas veces con
+  // multiplicaciones y divisiones, así que conviene más precisión interna
+  // para no arrastrar redondeo — se redondea a 2 decimales recién al
+  // mostrarlo en un reporte o al facturar.
+  costoPromedioActual Decimal? @db.Decimal(14, 6)
+  // Total global de la empresa, sin importar la sucursal — se sigue
+  // actualizando exactamente igual que siempre, en la misma transacción que
+  // cada movimiento. StockSucursal es una capa ADITIVA que convive con este
+  // campo (igual que ya convive LoteProducto): para productos que manejan
+  // lotes, stockActual sigue siendo la única fuente de verdad (sin sucursal);
+  // para productos SIN lote, StockSucursal desglosa este mismo total por
+  // ubicación física. Un traslado entre sucursales NUNCA toca este campo,
+  // porque solo redistribuye entre dos filas de StockSucursal.
+  stockActual         Int      @default(0)
+  stockMinimo         Int      @default(0)
+  unidadMedida        String   @default("UNIDAD")
+  activo              Boolean  @default(true)
+
+  // Productos perecibles: si manejaLotes es true, el stock se ingresa y se
+  // vende por lote (ver LoteProducto), cada uno con su propia caducidad, y
+  // las ventas descuentan primero del lote que caduca más pronto (FEFO).
+  // Si es false, "fechaCaducidad" es opcional y única para todo el producto
+  // (alcanza para productos varios que no rotan por lote).
+  manejaLotes    Boolean   @default(false)
+  fechaCaducidad DateTime?
+
+  // Si es true, cada unidad que entra por Compras necesita su propio número
+  // de serie capturado por bodega (ver NumeroSerieProducto) — pensado para
+  // equipos como switches/routers/ONUs donde interesa saber más adelante A
+  // QUIÉN se entregó tal unidad puntual, no solo cuántas se vendieron.
+  // false (default): el producto sigue funcionando solo por cantidad, como
+  // siempre — la gran mayoría del catálogo (cable, tornillos, etc.) no
+  // necesita esto.
+  controlaNumeroSerie Boolean @default(false)
+
+  // Ítem no físico (servicio): al facturarlo, POST /facturas NUNCA valida ni
+  // descuenta stock (ver descontarStockVenta), sin importar stockActual/
+  // manejaLotes — pensado para servicios (visita técnica, plan de internet)
+  // que no salen de ninguna bodega. Ver también precioFijo abajo: casi todo
+  // producto con esServicio=true también trae un precioFijo, porque un
+  // servicio recurrente no tiene "costo promedio de compra" del que calcular
+  // margen (ver utils/precios.ts).
+  esServicio Boolean  @default(false)
+  // Precio de venta fijo, ya con las utilidades de la empresa incluidas —
+  // cuando está seteado, utils/precios.ts lo devuelve TAL CUAL, ignorando
+  // costoPromedioActual y el % de ganancia de TipoPrecio del cliente (no
+  // aplica el esquema de categorías de precio a este producto puntual).
+  // Null = seguir con el cálculo normal costo × margen.
+  precioFijo Decimal? @db.Decimal(10, 2)
+
+  categoriaId Int?
+  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+
+  movimientos              MovimientoInventario[]
+  planInternet             PlanInternet? // lado opuesto de PlanInternet.productoId, ver ahí
+  facturaDetalles          FacturaDetalle[]
+  notaCreditoDetalles      NotaCreditoDetalle[]
+  notaVentaDetalles        NotaVentaDetalle[]
+  compraDetalles           CompraDetalle[]
+  devolucionCompraDetalles DevolucionCompraDetalle[]
+  proformaDetalles         ProformaDetalle[]
+  lotes                    LoteProducto[]
+  stockPorSucursal         StockSucursal[]
+  stockPorBodega           StockBodega[]
+  trasladoDetalles         TrasladoDetalle[]
+  guiaRemisionDetalles     GuiaRemisionDetalle[]
+  numerosSerie             NumeroSerieProducto[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Un número de serie físico de UNA unidad de un producto que controla serie
+// (ver Producto.controlaNumeroSerie). Nace en EN_BODEGA cuando bodega lo
+// captura contra la línea de compra que la trajo (ver "pendientes de
+// serializar" en routes/compras.ts); pasa a ENTREGADO cuando alguien lo
+// vincula a un cliente puntual (acción aparte, opcional — asignar el serial
+// NUNCA bloquea completar una venta, ver routes/productos.ts). Esto es lo
+// que permite responder "¿a quién se le entregó el equipo con este serial?"
+// sin depender de que quien vendió se acuerde de anotarlo en la descripción.
+model NumeroSerieProducto {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  numeroSerie String
+
+  // De qué línea de compra entró esta unidad — null solo se daría si algún
+  // día se permite cargar un serial de stock que ya existía antes de
+  // activarle controlaNumeroSerie al producto (no implementado todavía; se
+  // deja opcional por si acaso, igual criterio que otros campos "por si
+  // acaso" de este sistema, ej. MovimientoInventario.bodegaId histórico).
+  compraDetalleId Int?
+  compraDetalle   CompraDetalle? @relation(fields: [compraDetalleId], references: [id])
+
+  estado EstadoNumeroSerie @default(EN_BODEGA)
+
+  // Se llenan juntos al "entregar" (asignar a un cliente) — nunca antes, ver
+  // POST /productos/series/:id/entregar. A propósito NO es una FK a
+  // Factura/NotaVenta: la entrega es una acción aparte de bodega/admin,
+  // deliberadamente desacoplada de la venta (puede pasar mucho después, o
+  // nunca) — "referenciaDocumento" es solo un texto libre de apoyo (ej.
+  // "Factura 001-001-000123") para quien lo entrega, no una relación real.
+  clienteId           Int?
+  cliente             Cliente?  @relation(fields: [clienteId], references: [id])
+  referenciaDocumento String?
+  fechaEntrega        DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Un mismo número de serie no puede repetirse dos veces PARA EL MISMO
+  // PRODUCTO (sí podría coincidir por casualidad con el de otro producto
+  // distinto — no se fuerza unicidad global, cada fabricante numera el suyo).
+  @@unique([productoId, numeroSerie])
+}
+
+enum EstadoNumeroSerie {
+  EN_BODEGA
+  ENTREGADO
+}
+
+// Un lote de un producto perecible: cantidad que queda de ESE lote y su
+// propia fecha de caducidad. Un producto con manejaLotes=true puede tener
+// varios lotes activos a la vez (llegó un lote nuevo antes de agotar el
+// anterior); las ventas los consumen del que caduca más pronto al que
+// caduca más tarde (FEFO - First Expired, First Out).
+model LoteProducto {
+  id             Int      @id @default(autoincrement())
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id])
+  numeroLote     String?
+  fechaCaducidad DateTime
+  cantidad       Int // lo que queda disponible de este lote (baja con cada venta)
+
+  movimientos MovimientoInventario[]
+
+  createdAt DateTime @default(now())
+}
+
+model MovimientoInventario {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  // Solo se llena para productos que manejan lotes: de qué lote salió o a
+  // qué lote entró esta cantidad, para poder reconstruir cuánto queda de
+  // cada uno sin recalcular todo el kardex.
+  loteProductoId Int?
+  loteProducto   LoteProducto? @relation(fields: [loteProductoId], references: [id])
+
+  // Solo se llena para productos que NO manejan lotes (ver Producto.stockActual
+  // y StockSucursal) — un movimiento de un producto con lote no tiene
+  // sucursal, porque ese stock todavía es global.
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  // Igual criterio que sucursalId, un nivel más fino — además queda null en
+  // movimientos históricos anteriores a la existencia de Bodega (no se
+  // inventa precisión que no existía en ese momento, ver la migración de
+  // backfill de Bodega).
+  bodegaId Int?
+  bodega   Bodega? @relation(fields: [bodegaId], references: [id])
+
+  tipo     TipoMovimiento
+  cantidad Int
+  motivo   String?
+  fecha    DateTime       @default(now())
+}
+
+enum TipoMovimiento {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+// --- Módulo de SUCURSALES (locales físicos de la misma empresa) ---
+// Cada sucursal tiene su propio desglose de stock (StockSucursal) para los
+// productos que NO manejan lotes; los productos con lote siguen usando un
+// único stock global (Producto.stockActual + LoteProducto), sin sucursal —
+// ver el comentario en Producto.stockActual.
+model Sucursal {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  direccion String?
+  activa    Boolean  @default(true)
+  // Determina el período/fecha de pago del décimo cuarto sueldo de los
+  // empleados de esta sucursal (ver utils/decimos.ts): "SIERRA_ORIENTE"
+  // (1-ago a 31-jul, pago hasta 15-ago) o "COSTA_GALAPAGOS" (1-mar a
+  // 28/29-feb, pago hasta 15-mar). Default Sierra/Oriente porque la
+  // empresa "principal" de este sistema opera en Cuenca.
+  region    String   @default("SIERRA_ORIENTE")
+  createdAt DateTime @default(now())
+
+  // Geocerca para marcaciones de asistencia (ver utils/geocercas.ts) — los
+  // tres quedan null hasta que un admin la configure desde Ajustes; sin
+  // geocerca configurada, las marcaciones de esta sucursal simplemente no
+  // evalúan ubicación (no se bloquea nada, ver Marcacion.dentroDeGeocerca).
+  latitud             Decimal? @db.Decimal(9, 6)
+  longitud            Decimal? @db.Decimal(9, 6)
+  radioGeocercaMetros Int?
+
+  usuarios    Usuario[]
+  stocks      StockSucursal[]
+  bodegas     Bodega[]
+  puntosVenta PuntoDeVenta[]
+  movimientos MovimientoInventario[]
+  facturas    Factura[]
+  notasVenta  NotaVenta[]
+  compras     Compra[]
+  empleados   Empleado[]
+
+  trasladosOrigen  Traslado[] @relation("TrasladoOrigen")
+  trasladosDestino Traslado[] @relation("TrasladoDestino")
+
+  cajaSesiones CajaSesion[]
+}
+
+// Desglose de Producto.stockActual por sucursal — solo existe una fila por
+// (producto, sucursal) para productos que NO manejan lotes. La suma de
+// "cantidad" de todas las filas de un producto siempre debe coincidir con su
+// Producto.stockActual.
+model StockSucursal {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+  cantidad   Int      @default(0)
+
+  @@unique([productoId, sucursalId])
+}
+
+// --- Módulo de BODEGAS (subdivisión física DENTRO de una sucursal) ---
+// A diferencia de Sucursal (fija por usuario, releída de la BD en cada
+// petición), la bodega se elige EXPLÍCITAMENTE en cada documento (ver
+// bodegaId en Compra/Factura/NotaVenta) — el mismo cajero de una sucursal
+// puede despachar hoy desde "Bodega Electrónicos" y mañana desde "Bodega
+// Verduras". Toda sucursal debe tener al menos una bodega activa: se
+// refuerza en routes/sucursales.ts (toda sucursal nueva nace con una
+// "Bodega Principal" automática) y en routes/bodegas.ts (no se puede
+// desactivar la última bodega activa de una sucursal).
+model Bodega {
+  id         Int      @id @default(autoincrement())
+  nombre     String
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+  activa     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  stocks      StockBodega[]
+  movimientos MovimientoInventario[]
+  facturas    Factura[]
+  notasVenta  NotaVenta[]
+  compras     Compra[]
+
+  trasladosOrigen  Traslado[] @relation("TrasladoBodegaOrigen")
+  trasladosDestino Traslado[] @relation("TrasladoBodegaDestino")
+
+  @@unique([sucursalId, nombre])
+}
+
+// Desglose de StockSucursal.cantidad por bodega — solo existe una fila por
+// (producto, bodega) para productos que NO manejan lotes. La suma de
+// "cantidad" de todas las bodegas de una sucursal siempre debe coincidir con
+// StockSucursal.cantidad de esa sucursal (misma invariante aditiva que ya
+// une StockSucursal con Producto.stockActual).
+model StockBodega {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+  bodegaId   Int
+  bodega     Bodega   @relation(fields: [bodegaId], references: [id])
+  cantidad   Int      @default(0)
+
+  @@unique([productoId, bodegaId])
+}
+
+// Traslado interno de stock entre dos bodegas de la misma empresa — pueden
+// ser de la misma sucursal (reclasificar mercadería entre bodegas) o de
+// sucursales distintas; no es una compra ni una venta, solo redistribuye
+// StockBodega/StockSucursal (nunca toca Producto.stockActual, ver el
+// comentario ahí). Solo admite productos que NO manejan lotes (ver
+// backend/src/routes/traslados.ts). No existe "anular traslado": un error
+// se corrige con un traslado igual y opuesto.
+model Traslado {
+  id                Int      @id @default(autoincrement())
+  sucursalOrigenId  Int
+  sucursalOrigen    Sucursal @relation("TrasladoOrigen", fields: [sucursalOrigenId], references: [id])
+  sucursalDestinoId Int
+  sucursalDestino   Sucursal @relation("TrasladoDestino", fields: [sucursalDestinoId], references: [id])
+  bodegaOrigenId    Int
+  bodegaOrigen      Bodega   @relation("TrasladoBodegaOrigen", fields: [bodegaOrigenId], references: [id])
+  bodegaDestinoId   Int
+  bodegaDestino     Bodega   @relation("TrasladoBodegaDestino", fields: [bodegaDestinoId], references: [id])
+  motivo            String?
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  detalles  TrasladoDetalle[]
+  createdAt DateTime          @default(now())
+}
+
+model TrasladoDetalle {
+  id         Int      @id @default(autoincrement())
+  trasladoId Int
+  traslado   Traslado @relation(fields: [trasladoId], references: [id])
+
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+  cantidad   Int
+}
+
+// --- Módulo de PUNTOS DE VENTA (mostradores/cajas registradoras DENTRO de
+// una sucursal, ej. 3 puestos de cobro en la misma tienda) ---
+// A diferencia de Bodega (toda sucursal debe tener al menos una), esto es
+// OPCIONAL: una sucursal que nunca crea ningún PuntoDeVenta sigue
+// funcionando exactamente igual que antes de este módulo (una sola caja
+// compartida por sucursal, sin desglose). Todos los puntos de venta de una
+// misma sucursal comparten la MISMA numeración secuencial de facturas — no
+// tiene relación con Secuencial.puntoVenta (ese es el código de serie del
+// SRI, un campo de texto no relacionado a este modelo).
+model PuntoDeVenta {
+  id         Int      @id @default(autoincrement())
+  nombre     String
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  cajaSesiones CajaSesion[]
+  facturas     Factura[]
+  notasVenta   NotaVenta[]
+  compras      Compra[]
+
+  @@unique([sucursalId, nombre])
+}
+
+// --- Módulo de CAJA (apertura/cierre con arqueo) ---
+
+enum EstadoCajaSesion {
+  ABIERTA
+  CERRADA
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  EGRESO
+}
+
+// Un turno de caja de una sucursal: se abre declarando el efectivo con que
+// arranca el cajero y se cierra contando el efectivo físico. Todo lo que pasa
+// "dentro" de esta ventana de tiempo (ventas en efectivo, movimientos
+// manuales) es lo que compone el efectivo esperado — ver utils/caja.ts.
+// Invariante de negocio: como mucho una CajaSesion ABIERTA por (sucursal,
+// punto de venta) a la vez — reforzado con un índice único parcial agregado
+// a mano en la migración (Prisma no soporta índices parciales en el DSL),
+// además del chequeo dentro de la transacción en routes/caja.ts. Cuando la
+// sucursal no usa puntos de venta, puntoVentaId queda null y la invariante
+// se aplica igual a nivel de sucursal completa (mismo comportamiento que
+// antes de que existiera PuntoDeVenta).
+model CajaSesion {
+  id Int @id @default(autoincrement())
+
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+
+  // Opcional: a qué caja registradora física pertenece este turno — null si
+  // la sucursal no divide su caja por punto de venta (ver PuntoDeVenta).
+  puntoVentaId Int?
+  puntoVenta   PuntoDeVenta? @relation(fields: [puntoVentaId], references: [id])
+
+  estado EstadoCajaSesion @default(ABIERTA)
+
+  montoInicial Decimal  @db.Decimal(10, 2)
+  abiertaPorId Int
+  abiertaPor   Usuario  @relation("CajaSesionAbiertaPor", fields: [abiertaPorId], references: [id])
+  abiertaEn    DateTime @default(now())
+
+  // Los cinco quedan null mientras estado == ABIERTA; se completan juntos al cerrar.
+  cerradaPorId        Int?
+  cerradaPor          Usuario?  @relation("CajaSesionCerradaPor", fields: [cerradaPorId], references: [id])
+  cerradaEn           DateTime?
+  montoContado        Decimal?  @db.Decimal(10, 2) // lo que el cajero contó físicamente
+  montoEsperado       Decimal?  @db.Decimal(10, 2) // snapshot del cálculo al momento del cierre
+  diferencia          Decimal?  @db.Decimal(10, 2) // montoContado - montoEsperado (positivo=sobrante, negativo=faltante)
+  observacionesCierre String?
+
+  movimientos MovimientoCaja[]
+  createdAt   DateTime         @default(now())
+}
+
+// Ingreso/egreso de efectivo que NO viene de una venta ni de una compra (ej.
+// retiro para gastos, aporte del dueño). Solo puede crearse mientras su
+// CajaSesion sigue ABIERTA (lo valida la ruta, no un constraint de BD, mismo
+// criterio que el resto del sistema). "motivo" es obligatorio porque acá ES
+// el único rastro de auditoría de por qué salió/entró dinero sin documento.
+model MovimientoCaja {
+  id Int @id @default(autoincrement())
+
+  cajaSesionId Int
+  cajaSesion   CajaSesion @relation(fields: [cajaSesionId], references: [id])
+
+  tipo   TipoMovimientoCaja
+  monto  Decimal            @db.Decimal(10, 2) // siempre positivo; el signo lo da "tipo"
+  motivo String
+
+  usuarioId Int
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  fecha     DateTime @default(now())
+}
+
+// --- Lección de hoy: módulo de VENTAS / FACTURACIÓN ---
+
+model Cliente {
+  id                 Int        @id @default(autoincrement())
+  tipoIdentificacion String     @default("CEDULA") // CEDULA, RUC, PASAPORTE
+  identificacion     String     @unique
+  razonSocial        String
+  direccion          String?
+  ciudad             String?
+  email              String?
+  telefono           String?
+  // Ubicación de la vivienda del cliente — se llena pegando el mensaje de
+  // "ubicación actual" que manda por WhatsApp (ver
+  // frontend/src/utils/parsearUbicacion.ts, que extrae lat/lng del enlace
+  // de Google Maps que trae ese mensaje). Sirve para que el técnico llegue
+  // directo con el mapa, sin depender de que la referencia escrita en
+  // "direccion" alcance para ubicar la casa. A diferencia de la geocerca de
+  // Sucursal (Decimal 9,6, alcanza para un radio de metros), acá se guarda
+  // con 7 decimales — la misma precisión que trae el enlace de Google Maps
+  // del mensaje de WhatsApp — para no redondear nada que no venga ya
+  // redondeado en el mensaje original.
+  latitud            Decimal?   @db.Decimal(10, 7)
+  longitud           Decimal?   @db.Decimal(10, 7)
+  // Qué categoría de precio (ver TipoPrecio abajo) determina el precio que
+  // se le cobra a este cliente en cada venta — costoPromedioActual del
+  // producto × (1 + tipoPrecio.porcentajeGanancia/100), calculado al vuelo
+  // (ver utils/precios.ts). Editable: un cliente puede cambiar de categoría
+  // con el tiempo.
+  tipoPrecioId       Int
+  tipoPrecio         TipoPrecio @relation(fields: [tipoPrecioId], references: [id])
+
+  // --- Adaptación a ISP: vínculo con el Mikrotik (ver utils/mikrotik.ts) ---
+  // La red real del cliente (H&A) es IP fija por address-list — NO PPPoE
+  // (confirmado contra un router ISPCube real en producción: cada cliente
+  // tiene una IP asignada a mano por el técnico según el puerto/PON al que
+  // se conecta, agregada a /ip/firewall/address-list con list=<código del
+  // plan> — nunca a un pool DHCP ni a una cuenta PPPoE). direccionIp queda
+  // null hasta que el técnico se la asigna. Único: una misma IP no puede
+  // pertenecer a dos clientes. Al asignar/cambiar planInternetId con una
+  // direccionIp ya puesta, el backend sincroniza la entrada de address-list
+  // en el Mikrotik (ver routes/clientes.ts) — best-effort, nunca bloquea el
+  // guardado si el router no responde.
+  direccionIp    String?       @unique
+  planInternetId Int?
+  planInternet   PlanInternet? @relation(fields: [planInternetId], references: [id])
+
+  // A qué nodo/sector pertenece este cliente — determina A CUÁL Mikrotik se
+  // le sincroniza la IP (cada nodo tiene su propio router, ver NodoRed
+  // abajo). null hasta que se le asigna un nodo; sin nodo, direccionIp se
+  // guarda pero no se sincroniza con ningún router (no hay a cuál).
+  nodoId Int?
+  nodo   NodoRed? @relation(fields: [nodoId], references: [id])
+
+  // A cuál VLAN de ese nodo pertenece (opcional — un nodo puede no tener
+  // VLANs cargadas todavía, o el cliente puede estar en la red plana del
+  // nodo sin VLAN). Puramente organizativo/de referencia: NO participa en
+  // la lógica de suspensión (ver comentario en VlanNodo arriba).
+  vlanNodoId Int?
+  vlanNodo   VlanNodo? @relation(fields: [vlanNodoId], references: [id])
+
+  // Prórroga manual de pago: cuando un cliente llama pidiendo unos días más
+  // (ver utils/gestionServicioInternet.ts), el admin le fija esta fecha y el
+  // job de suspensión automática (jobs/suspensionInternetPorFaltaPago.ts) no
+  // lo corta aunque siga sin pagar, hasta que se cumpla. Sin esto, una
+  // reactivación manual duraba menos de una hora: el job la deshacía sola en
+  // su próxima corrida porque no tenía forma de saber que era a propósito.
+  // null = sin ninguna prórroga vigente (el caso normal).
+  prorrogaHasta DateTime?
+
+  // Fecha en la que el cliente firmó el contrato de internet — el DÍA DEL
+  // MES de esta fecha es su propio "día de corte": todos los meses, ese día
+  // se valida si ya pagó la factura de su plan (ver
+  // utils/gestionServicioInternet.ts) y si no, se suspende. Reemplaza (para
+  // los clientes que sí tengan esto cargado) el día de corte único de la
+  // empresa (Ajustes → cicloCorteInternet) — null = todavía no se cargó, y
+  // ese cliente sigue con el día de corte general de la empresa como antes.
+  fechaContrato DateTime?
+
+  facturas              Factura[]
+  notasVenta            NotaVenta[]
+  proformas             Proforma[]
+  visitasTecnicas       VisitaTecnica[]
+  cobrosInternet        Pago[] // lado opuesto de Pago.clienteId, ver ahí
+  numerosSerieRecibidos NumeroSerieProducto[] // equipos serializados entregados a este cliente
+
+  createdAt DateTime @default(now())
+}
+
+// Un nodo de red: punto de conexión físico (ej. un armario/caseta de un
+// sector) con su propio Mikrotik a cargo de los clientes de esa zona — cada
+// nodo tiene su PROPIA conexión API (host/puerto/usuario/contraseña
+// independientes, nunca compartidos entre nodos: si se compromete el router
+// de un sector, no compromete los demás). rangoIpInicio/Fin es solo
+// informativo, para sugerir/validar en el formulario de Cliente — el
+// sistema no reserva ni controla un pool real, la IP la sigue asignando a
+// mano el técnico (ver Cliente.direccionIp).
+model NodoRed {
+  id                    Int       @id @default(autoincrement())
+  nombre                String // ej. "Nodo Misicata"
+  descripcion           String? // ej. ubicación física / sector que cubre
+  mikrotikHost          String
+  mikrotikPuerto        Int       @default(8728)
+  mikrotikUsuario       String
+  mikrotikPassword      String
+  // Prefijo CIDR de la red del nodo (ej. 24 para /24 con 254 direcciones
+  // útiles, 22 para /22 con 1022) — cada nodo puede tener uno distinto según
+  // cuántos clientes tiene ese sector. Solo se usa para SUGERIR
+  // rangoIpInicio/Fin al elegirlo en el formulario (ver NodosPage.tsx); esos
+  // dos siguen siendo los que de verdad se guardan y usan para sugerir IPs
+  // libres — mascaraRed es informativo/de ayuda, no autoritativo.
+  mascaraRed            Int?
+  rangoIpInicio         String?
+  rangoIpFin            String?
+  // Última vez que el pulso de vida (ver GET /mikrotik/:nodoId/estado) logró
+  // conectarse — se actualiza en cada chequeo exitoso. null = nunca se ha
+  // podido conectar. Sirve para mostrar "sin conexión desde hace X" cuando
+  // el nodo está caído, sin depender de que alguien tenga la pantalla
+  // abierta todo ese tiempo (queda guardado en la base, no en memoria).
+  ultimaConexionExitosa DateTime?
+  activo                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+
+  clientes  Cliente[]
+  respaldos RespaldoMikrotik[]
+  vlans     VlanNodo[]
+}
+
+// Una VLAN configurada en el Mikrotik de un nodo — un mismo router puede
+// atender varios sub-sectores/servicios en VLANs distintas, cada una con su
+// propia subred; esto permite agrupar/administrar a los clientes de cada
+// una por separado en vez de tratar todo el nodo como una sola red plana.
+// Se puede cargar a mano o detectar del router (ver GET
+// /nodos-red/:id/vlans/detectar → lee /interface/vlan/print). A propósito
+// NO cambia cómo se suspende/reactiva a un cliente (eso sigue siendo por IP,
+// ver utils/mikrotik.ts) — las subredes de cada VLAN no se superponen, así
+// que el mecanismo de address-list de siempre ya funciona igual sin
+// importar la VLAN.
+model VlanNodo {
+  id     Int     @id @default(autoincrement())
+  nodoId Int
+  nodo   NodoRed @relation(fields: [nodoId], references: [id])
+
+  nombre   String // ej. "VLAN 10 - Clientes Norte"
+  vlanId   Int // el VLAN ID real configurado en RouterOS (ej. 10)
+  // Nombre de la interfaz VLAN en el router (ej. "vlan10") — informativo,
+  // como referencia de diagnóstico; no se usa para ninguna decisión.
+  interfaz String?
+
+  // Mismo criterio que NodoRed.mascaraRed/rangoIpInicio/Fin, pero acotado a
+  // la subred de ESTA VLAN — cada VLAN puede tener su propio rango, más
+  // chico que el del nodo completo.
+  mascaraRed    Int?
+  rangoIpInicio String?
+  rangoIpFin    String?
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  clientes Cliente[]
+
+  @@unique([nodoId, vlanId])
+}
+
+// Copia de la configuración del Mikrotik de un nodo (listas de interfaces,
+// reglas de firewall/NAT, address-lists) en un momento dado — para que si el
+// equipo físico se daña, se pueda reponer uno nuevo (de fábrica) y restaurar
+// esta misma configuración en vez de rearmarla a mano regla por regla. Ver
+// utils/mikrotik.ts (respaldarConfiguracionNodo/restaurarConfiguracionNodo).
+// Los conteos van aparte del JSON para poder listar el historial sin tener
+// que parsear "contenido" solo para mostrar un resumen.
+model RespaldoMikrotik {
+  id     Int     @id @default(autoincrement())
+  nodoId Int
+  nodo   NodoRed @relation(fields: [nodoId], references: [id])
+
+  contenido Json // { capturadoEn, interfaceLists, interfaceListMembers, firewallFilterRules, firewallNatRules, addressListEntries }
+
+  totalInterfaceLists       Int
+  totalInterfaceListMembers Int
+  totalReglasFiltro         Int
+  totalReglasNat            Int
+  totalEntradasAddressList  Int
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// Catálogo de planes de internet que un Cliente del ISP puede contratar
+// (nombre + velocidad + precio). Al asignarlo a un Cliente con direccionIp
+// y nodoId ya configurados, el sistema sincroniza solo la address-list en
+// el Mikrotik de SU nodo — ver PUT /clientes/:id.
+model PlanInternet {
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  velocidadSubida String // ej. "5M" — solo informativo acá; el límite real se aprovisiona en la OLT por ONU, no en el Mikrotik
+  velocidadBajada String // ej. "10M"
+  precio          Decimal  @db.Decimal(10, 2)
+  // Nombre EXACTO de la address-list en el Mikrotik de CADA nodo para este
+  // plan (ej. "PLAN550", "PLAN650") — mismo código en todos los nodos por
+  // convención; este sistema solo agrega/quita la IP del cliente de esa
+  // lista, nunca crea el Queue/la shape de velocidad (eso vive en la OLT).
+  // null = plan sin código todavía asignado, no se puede vincular a
+  // clientes hasta ponérselo.
+  codigoMikrotik  String?  @unique
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  // Producto "espejo" auto-provisionado (ver utils/planProducto.ts) que
+  // representa este plan como línea de factura: esServicio=true, sin stock,
+  // precioFijo sincronizado con "precio" de arriba cada vez que el plan se
+  // edita. Se crea solo cuando hace falta (primera vez que se factura o se
+  // guarda el plan) — null hasta entonces.
+  productoId Int?      @unique
+  producto   Producto? @relation(fields: [productoId], references: [id])
+
+  clientes Cliente[]
+}
+
+// Categoría de precio de venta configurable por el admin (ej. "Mayorista",
+// "Minorista A") — cada Cliente se asigna a una, y el precio que se le
+// cobra por cualquier producto se calcula al vuelo como
+// costoPromedioActual × (1 + porcentajeGanancia/100), nunca se guarda (ver
+// utils/precios.ts). Reemplaza el esquema fijo de 2 niveles
+// (tipoCliente + Producto.precioUnitario/precioMayorista).
+model TipoPrecio {
+  id                 Int       @id @default(autoincrement())
+  nombre             String    @unique
+  porcentajeGanancia Decimal   @db.Decimal(5, 2)
+  activo             Boolean   @default(true)
+  clientes           Cliente[]
+  createdAt          DateTime  @default(now())
+}
+
+model Factura {
+  id           Int      @id @default(autoincrement())
+  secuencial   String   @unique // ej. "001-001-000000001"
+  claveAcceso  String?  @unique // los 49 dígitos que exige el SRI
+  fechaEmision DateTime @default(now())
+
+  clienteId Int
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  // Sucursal donde se hizo esta venta (siempre la del usuario que la creó,
+  // releída de la BD, nunca del body).
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+
+  // Bodega (dentro de esa sucursal) de donde salió el stock — a diferencia
+  // de sucursalId, esta SÍ viene explícita en el body (ver utils/bodegas.ts).
+  bodegaId Int
+  bodega   Bodega @relation(fields: [bodegaId], references: [id])
+
+  // Punto de venta (caja registradora) que hizo esta venta — a diferencia de
+  // bodegaId, NUNCA viene del body: se hereda en silencio de la CajaSesion
+  // ABIERTA de quien factura, si tiene una (ver utils/cajaSesionActual.ts).
+  // Null si quien vendió no tenía ninguna caja abierta, o si su sucursal no
+  // usa puntos de venta — es puramente informativo para el cálculo de
+  // efectivo esperado (utils/caja.ts), no participa de stock ni de SRI.
+  puntoVentaId Int?
+  puntoVenta   PuntoDeVenta? @relation(fields: [puntoVentaId], references: [id])
+
+  subtotal0  Decimal @db.Decimal(10, 2) // ventas con IVA 0%
+  subtotal12 Decimal @db.Decimal(10, 2) // ventas con IVA vigente
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  estado EstadoFactura @default(CREADA)
+
+  // Cuentas por cobrar: independiente del estado fiscal (una factura puede
+  // estar AUTORIZADA por el SRI y aun así seguir sin cobrarse). montoPagado
+  // se recalcula sumando los Pago asociados; estadoPago es una copia
+  // derivada para poder filtrar/ordenar rápido sin sumar en cada consulta.
+  estadoPago       EstadoPago @default(PENDIENTE)
+  montoPagado      Decimal    @default(0.00) @db.Decimal(10, 2)
+  // Opcional: sin fecha = nunca se cuenta como "vencida" en /reportes/cuentas-por-cobrar.
+  fechaVencimiento DateTime?
+
+  detalles          FacturaDetalle[]
+  notasCredito      NotaCredito[]
+  pagos             Pago[]
+  proformaOrigen    Proforma? // si esta factura nació de convertir una proforma
+  retencionRecibida RetencionRecibida? // 1 a 1: retención que un cliente le practicó a ESTA empresa sobre esta factura
+  guiasRemision     GuiaRemision[] // puede haber más de una (envío repartido en varios viajes)
+
+  createdAt DateTime @default(now())
+}
+
+enum EstadoPago {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+}
+
+// Cuenta bancaria de la empresa (catálogo global, no por sucursal — el banco
+// al que llega una transferencia es el mismo sin importar en qué local se
+// cobró). Se elige al registrar un Pago con formaPago TRANSFERENCIA/TARJETA/
+// CHEQUE, para poder conciliar el dinero real contra lo registrado aquí.
+model CuentaBancaria {
+  id           Int      @id @default(autoincrement())
+  nombre       String // etiqueta corta para elegir rápido al cobrar, ej. "Pichincha Corriente Principal"
+  banco        String // ej. "Banco Pichincha"
+  numeroCuenta String
+  tipoCuenta   String // "AHORROS" | "CORRIENTE"
+  activa       Boolean  @default(true)
+  pagos        Pago[]
+  createdAt    DateTime @default(now())
+
+  @@unique([banco, numeroCuenta])
+}
+
+// Un abono contra una Factura o NotaVenta (cuentas por cobrar) o una Compra
+// (cuenta por pagar) — nunca más de uno a la vez, por eso los tres campos son
+// opcionales pero se exige exactamente uno en la ruta que lo crea.
+model Pago {
+  id         Int      @id @default(autoincrement())
+  monto      Decimal  @db.Decimal(10, 2)
+  formaPago  String // EFECTIVO, TRANSFERENCIA, TARJETA, CHEQUE, OTRO
+  referencia String? // ej. número de comprobante de transferencia
+  fecha      DateTime @default(now())
+
+  facturaId Int?
+  factura   Factura? @relation(fields: [facturaId], references: [id])
+
+  // Cobro de internet registrado ANTES de que exista la factura del mes
+  // (ver routes/facturasInternet.ts): con miles de clientes pagando entre
+  // el 01 y el 05, no es viable facturar a cada uno antes de poder cobrarle
+  // — primero se registra el cobro (clienteId puesto, facturaId todavía
+  // null), y recién el 06 en adelante "Facturar a todos los pagados" genera
+  // la Factura de cada uno y ADOPTA este mismo Pago (le pone facturaId).
+  // Para un pago normal (contra una factura que YA existe) clienteId queda
+  // null — se llega al cliente a través de facturaId → Factura → Cliente,
+  // igual que siempre.
+  clienteId Int?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  compraId Int?
+  compra   Compra? @relation(fields: [compraId], references: [id])
+
+  notaVentaId Int?
+  notaVenta   NotaVenta? @relation(fields: [notaVentaId], references: [id])
+
+  // Solo se llena cuando formaPago es TRANSFERENCIA/TARJETA/CHEQUE (ver
+  // routes/facturas.ts, compras.ts, notasVenta.ts) — EFECTIVO y OTRO se
+  // quedan sin cuenta bancaria, igual que hoy.
+  cuentaBancariaId Int?
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+
+  // Ruta relativa (ej. "/uploads/<empresaId>/pagos-internet/pago-...jpg") a
+  // la captura del comprobante (transferencia, depósito) que el cliente
+  // mandó — opcional, hoy solo se sube desde la ventana de "Registrar pago"
+  // de Facturación de Internet (ver routes/facturasInternet.ts), mismo
+  // criterio que Producto.imagenUrl: se guarda en disco, acá solo la ruta.
+  comprobanteUrl String?
+
+  createdAt DateTime @default(now())
+}
+
+model FacturaDetalle {
+  id        Int     @id @default(autoincrement())
+  facturaId Int
+  factura   Factura @relation(fields: [facturaId], references: [id])
+
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id])
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2) // se copia del producto AL MOMENTO de la venta
+  descuento      Decimal  @default(0.00) @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  ivaValor       Decimal  @db.Decimal(10, 2)
+}
+
+model Secuencial {
+  id              Int    @id @default(autoincrement())
+  puntoVenta      String @default("001")
+  establecimiento String @default("001")
+  tipoComprobante String @default("01") // "01" = factura, "04" = nota de crédito, "06" = guía de remisión, "07" = retención, "NV" = nota de venta (interna, no es un código oficial del SRI)
+  ultimoNumero    Int    @default(0)
+
+  @@unique([puntoVenta, establecimiento, tipoComprobante])
+}
+
+// Fila única (id fijo = 1) para generar Producto.codigo de forma atómica —
+// mismo mecanismo de "upsert + increment dentro de la transacción" que
+// Secuencial arriba, pero sin ningún significado legal/SRI: es solo un
+// contador correlativo interno del catálogo (ver utils/codigoProducto.ts).
+model ContadorProducto {
+  id           Int @id @default(1)
+  ultimoNumero Int @default(0)
+}
+
+enum EstadoFactura {
+  CREADA
+  ENVIADA
+  AUTORIZADA
+  RECHAZADA
+  ANULADA
+}
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  usuario      String   @unique // el "username" con el que inicia sesión
+  passwordHash String
+  rol          String   @default("CAJERO") // "ADMIN" o "CAJERO"
+  permisos     String[] @default([]) // claves del catálogo en utils/permisos.ts; ADMIN ignora este campo
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  // Opcional — habilita la recuperación de contraseña por correo (ver
+  // POST /auth/recuperar-password/*). Sin esto, un usuario simplemente
+  // sigue dependiendo del reseteo por admin, como siempre. NO único: mismo
+  // criterio que Cliente.email/Proveedor.email — nada depende de que sea
+  // distinto por fila.
+  email String?
+
+  // Se pone en true cuando un admin resetea la contraseña de este usuario —
+  // el frontend bloquea el resto del sistema hasta que la cambie por una
+  // propia (ver POST /auth/cambiar-password).
+  debeCambiarPassword Boolean @default(false)
+
+  // Bloqueo por intentos fallidos de login (ver POST /auth/login). Se
+  // reinician los dos al iniciar sesión bien, o si un admin resetea la
+  // contraseña (así resetear también desbloquea, sin un paso aparte).
+  intentosFallidos Int       @default(0)
+  bloqueadoHasta   DateTime?
+
+  // Candado DEDICADO para el código de recuperación de contraseña por
+  // correo — separado a propósito de intentosFallidos/bloqueadoHasta de
+  // arriba (ese es el candado de LOGIN, con contraseña incorrecta). Si
+  // compartieran contador, adivinar el código mal unas veces dejaría a
+  // alguien a un paso de bloquearse el login también — dos amenazas
+  // distintas que no deben pisarse entre sí.
+  codigoRecuperacionHash     String?
+  codigoRecuperacionExpira   DateTime?
+  codigoRecuperacionIntentos Int       @default(0)
+
+  // La sucursal fija de este usuario — sus ventas/compras/movimientos/
+  // traslados afectan el stock de ESTA sucursal, releído de la base de datos
+  // en cada petición (nunca del JWT). Nullable a nivel de esquema solo para
+  // permitir la migración de usuarios ya existentes; la aplicación exige que
+  // todo usuario activo tenga una (ver utils/sucursales.ts).
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  // Vínculo opcional con el catálogo de Empleados (ver Marcaciones/Nómina)
+  // — Usuario y Empleado son modelos independientes a propósito (un
+  // empleado no necesariamente tiene acceso al sistema, y viceversa), pero
+  // para el módulo de Visitas Técnicas hace falta saber "qué Empleado es
+  // esta persona que inició sesión", para poder mostrarle SOLO su propia
+  // ruta del día (ver GET /visitas/mi-ruta-hoy). @unique porque un Empleado
+  // corresponde como máximo a un Usuario. Nullable: la gran mayoría de
+  // usuarios (cajeros, admins que no hacen visitas) no lo necesitan.
+  empleadoId Int?      @unique
+  empleado   Empleado? @relation(fields: [empleadoId], references: [id])
+
+  registrosAuditoria RegistroAuditoria[]
+  traslados          Traslado[]
+  respaldosMikrotik  RespaldoMikrotik[]
+
+  cajaSesionesAbiertas CajaSesion[]      @relation("CajaSesionAbiertaPor")
+  cajaSesionesCerradas CajaSesion[]      @relation("CajaSesionCerradaPor")
+  movimientosCaja      MovimientoCaja[]
+  asientosContables    AsientoContable[]
+}
+
+// Bitácora de acciones sensibles (anular, eliminar, editar, desactivar) que
+// no dejan rastro propio en otro lado — a diferencia de MovimientoInventario
+// (que ya audita cambios de stock), esto responde "¿quién hizo qué y cuándo?"
+// para cualquier acción administrativa. "entidadId" queda suelto (sin FK) a
+// propósito: el registro debe sobrevivir aunque la entidad referenciada se
+// borre algún día, y puede apuntar a modelos distintos según "entidad".
+model RegistroAuditoria {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  accion    String // ej. "ANULAR_FACTURA", "DESACTIVAR_PRODUCTO", "ELIMINAR_PAGO"
+  entidad   String // ej. "Factura", "Producto"
+  entidadId Int?
+  detalle   String? // texto libre con contexto legible (ej. "Factura 001-001-000000010")
+
+  fecha DateTime @default(now())
+}
+
+// --- Módulo de NOTAS DE CRÉDITO ---
+// Una nota de crédito corrige/anula (total o parcialmente) una factura que
+// YA fue autorizada por el SRI. Es un comprobante electrónico propio, con
+// su propia clave de acceso y su propio secuencial (por eso Secuencial ahora
+// distingue por "tipoComprobante").
+
+model NotaCredito {
+  id           Int      @id @default(autoincrement())
+  secuencial   String   @unique // ej. "001-001-000000001", pero bajo tipoComprobante "04"
+  claveAcceso  String?  @unique
+  fechaEmision DateTime @default(now())
+  motivo       String
+
+  facturaId Int // la factura autorizada que esta nota de crédito corrige
+  factura   Factura @relation(fields: [facturaId], references: [id])
+
+  subtotal0  Decimal @db.Decimal(10, 2)
+  subtotal12 Decimal @db.Decimal(10, 2)
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  estado EstadoFactura @default(CREADA) // reutilizamos el mismo enum: mismos estados posibles
+
+  detalles NotaCreditoDetalle[]
+
+  createdAt DateTime @default(now())
+}
+
+model NotaCreditoDetalle {
+  id            Int         @id @default(autoincrement())
+  notaCreditoId Int
+  notaCredito   NotaCredito @relation(fields: [notaCreditoId], references: [id])
+
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id])
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2) // se copia de la factura original, no del producto actual
+  subtotal       Decimal  @db.Decimal(10, 2)
+  ivaValor       Decimal  @db.Decimal(10, 2)
+}
+
+// --- Módulo de NOTAS DE VENTA ---
+// Una nota de venta es un comprobante de venta INTERNO: para clientes que no
+// necesitan una factura formal (no van a usarla para crédito tributario).
+// A diferencia de Factura y NotaCredito, NUNCA se envía al SRI — no tiene
+// clave de acceso, no se firma con XAdES, no tiene estados de autorización.
+// Por eso su ciclo de vida es mucho más simple: solo CREADA o ANULADA.
+model NotaVenta {
+  id           Int      @id @default(autoincrement())
+  secuencial   String   @unique // ej. "001-001-000000001", bajo tipoComprobante "NV"
+  fechaEmision DateTime @default(now())
+
+  clienteId Int
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  // Igual que en Factura: sucursal donde se hizo esta venta.
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+
+  // Igual que en Factura: bodega explícita dentro de esa sucursal.
+  bodegaId Int
+  bodega   Bodega @relation(fields: [bodegaId], references: [id])
+
+  // Igual que en Factura: heredado en silencio de la caja abierta de quien vendió.
+  puntoVentaId Int?
+  puntoVenta   PuntoDeVenta? @relation(fields: [puntoVentaId], references: [id])
+
+  // En Ecuador, la nota de venta (recibo interno) normalmente NO desglosa IVA.
+  // Por defecto no se aplica, pero se deja la opción de activarlo caso por caso
+  // (ej. si el negocio sí quiere cobrarlo en una venta puntual).
+  aplicaIva Boolean @default(false)
+
+  subtotal0  Decimal @db.Decimal(10, 2)
+  subtotal12 Decimal @db.Decimal(10, 2)
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  estado EstadoNotaVenta @default(CREADA)
+
+  // Cuentas por cobrar: igual que en Factura, independiente del estado del
+  // documento — una nota de venta "al fiado" queda CREADA pero sin cobrarse.
+  estadoPago       EstadoPago @default(PENDIENTE)
+  montoPagado      Decimal    @default(0.00) @db.Decimal(10, 2)
+  fechaVencimiento DateTime?
+
+  detalles       NotaVentaDetalle[]
+  pagos          Pago[]
+  proformaOrigen Proforma? // si esta nota de venta nació de convertir una proforma
+
+  createdAt DateTime @default(now())
+}
+
+model NotaVentaDetalle {
+  id          Int       @id @default(autoincrement())
+  notaVentaId Int
+  notaVenta   NotaVenta @relation(fields: [notaVentaId], references: [id])
+
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id])
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2) // se copia del producto AL MOMENTO de la venta
+  descuento      Decimal  @default(0.00) @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  ivaValor       Decimal  @db.Decimal(10, 2)
+}
+
+enum EstadoNotaVenta {
+  CREADA
+  ANULADA
+}
+
+// --- Módulo de COMPRAS ---
+// El "reverso" de una factura: en vez de un cliente comprándonos algo, es
+// este negocio comprándole a un proveedor. Registrarla ENTRA stock (a
+// diferencia de vender, que lo SACA) y queda guardada como el comprobante de
+// compra que el proveedor entregó — pero ese comprobante lo emite ÉL, no
+// nosotros, así que a diferencia de Factura/NotaVenta esto NO usa el
+// contador de Secuencial ni tiene claveAcceso: solo archivamos el número de
+// documento que el proveedor ya trae impreso.
+model Proveedor {
+  id                 Int     @id @default(autoincrement())
+  tipoIdentificacion String  @default("RUC") // CEDULA, RUC, PASAPORTE
+  identificacion     String  @unique
+  razonSocial        String
+  direccion          String?
+  telefono           String?
+  email              String?
+  activo             Boolean @default(true)
+
+  compras Compra[]
+
+  createdAt DateTime @default(now())
+}
+
+model Compra {
+  id            Int      @id @default(autoincrement())
+  numeroFactura String // número de factura/comprobante que trae el PROVEEDOR, no lo generamos nosotros
+  fechaEmision  DateTime @default(now())
+
+  proveedorId Int
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
+
+  // Sucursal que recibió la mercadería (la del usuario que registró la
+  // compra) — igual criterio que Factura.sucursalId.
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+
+  // Bodega (dentro de esa sucursal) que recibió la mercadería — explícita en
+  // el body, igual criterio que Factura.bodegaId.
+  bodegaId Int
+  bodega   Bodega @relation(fields: [bodegaId], references: [id])
+
+  // Igual que en Factura: heredado en silencio de la caja abierta de quien
+  // registra la compra — así el efectivo que sale por esta compra se resta
+  // de la caja correcta cuando hay varias abiertas a la vez.
+  puntoVentaId Int?
+  puntoVenta   PuntoDeVenta? @relation(fields: [puntoVentaId], references: [id])
+
+  subtotal0  Decimal @db.Decimal(10, 2)
+  subtotal12 Decimal @db.Decimal(10, 2)
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  estado EstadoCompra @default(REGISTRADA)
+
+  // Cuentas por pagar: el reverso de Factura.estadoPago/montoPagado.
+  estadoPago       EstadoPago @default(PENDIENTE)
+  montoPagado      Decimal    @default(0.00) @db.Decimal(10, 2)
+  fechaVencimiento DateTime?
+
+  detalles     CompraDetalle[]
+  pagos        Pago[]
+  retencion    Retencion? // 1 a 1: null si esta compra todavía no tiene retención generada
+  devoluciones DevolucionCompra[] // devoluciones parciales — ver modelo abajo
+
+  createdAt DateTime @default(now())
+
+  // Evita registrar la misma factura del mismo proveedor dos veces por error.
+  @@unique([proveedorId, numeroFactura])
+}
+
+model CompraDetalle {
+  id       Int    @id @default(autoincrement())
+  compraId Int
+  compra   Compra @relation(fields: [compraId], references: [id])
+
+  productoId    Int
+  producto      Producto @relation(fields: [productoId], references: [id])
+  cantidad      Int
+  costoUnitario Decimal  @db.Decimal(10, 2) // precio de COMPRA — no toca el precioUnitario de venta del producto
+  subtotal      Decimal  @db.Decimal(10, 2)
+  ivaValor      Decimal  @db.Decimal(10, 2)
+
+  devolucionesDetalle DevolucionCompraDetalle[] // para sumar cuánto de esta línea ya se devolvió
+  numerosSerie        NumeroSerieProducto[]
+}
+
+// Devolución PARCIAL a un proveedor — el espejo de NotaCredito, pero del lado
+// de compras. A diferencia de NotaCredito (documento electrónico real que
+// esta empresa emite y envía al SRI), esto es un registro puramente interno:
+// el proveedor ya emitió su propio soporte de la devolución, igual que Compra
+// ya es un registro interno de lo que el proveedor facturó — por eso no tiene
+// claveAcceso ni estado (mismo criterio que RetencionRecibida, no NotaCredito).
+model DevolucionCompra {
+  id           Int      @id @default(autoincrement())
+  secuencial   String   @unique // interno, tipoComprobante "DC" — mismo criterio que "NV"/"PRO"
+  fechaEmision DateTime @default(now())
+  motivo       String
+
+  compraId Int
+  compra   Compra @relation(fields: [compraId], references: [id])
+
+  subtotal0  Decimal @db.Decimal(10, 2)
+  subtotal12 Decimal @db.Decimal(10, 2)
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  detalles  DevolucionCompraDetalle[]
+  createdAt DateTime                  @default(now())
+}
+
+model DevolucionCompraDetalle {
+  id                 Int              @id @default(autoincrement())
+  devolucionCompraId Int
+  devolucionCompra   DevolucionCompra @relation(fields: [devolucionCompraId], references: [id])
+
+  // Referencia a la línea ORIGINAL (no solo productoId): permite sumar cuánto
+  // se devolvió acumulado a través de varias devoluciones parciales en el
+  // tiempo — algo que NotaCredito no necesita trackear (una factura no admite
+  // más de una nota de crédito parcial superpuesta sin este mismo problema,
+  // pero acá sí puede pasar: dos devoluciones distintas sobre la misma compra).
+  compraDetalleId Int
+  compraDetalle   CompraDetalle @relation(fields: [compraDetalleId], references: [id])
+
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  cantidad      Int
+  costoUnitario Decimal @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+  ivaValor      Decimal @db.Decimal(10, 2)
+}
+
+// --- Módulo de RETENCIONES EN COMPRAS ---
+// Un Comprobante de Retención es un documento electrónico SRI tan formal
+// como Factura/NotaCredito: clave de acceso propia (tipoComprobante "07"),
+// XML firmado XAdES-BES, envío a Recepción y consulta de Autorización —
+// mismo pipeline, ver backend/src/routes/retenciones.ts. Reutiliza
+// EstadoFactura (mismo criterio que ya usa NotaCredito) porque los estados
+// posibles son idénticos.
+model Retencion {
+  id            Int      @id @default(autoincrement())
+  secuencial    String   @unique // ej. "001-001-000000001", bajo tipoComprobante "07"
+  claveAcceso   String?  @unique
+  fechaEmision  DateTime @default(now())
+  // "MM/AAAA" — periodo fiscal exigido por el SRI, derivado de fechaEmision
+  // al crear (nunca se pide al usuario, evita inconsistencias entre los dos).
+  periodoFiscal String
+
+  // Relación 1 a 1: como mucho una retención por compra (un comprobante de
+  // retención por transacción, como en la práctica real).
+  compraId Int    @unique
+  compra   Compra @relation(fields: [compraId], references: [id])
+
+  totalIva   Decimal @default(0.00) @db.Decimal(10, 2)
+  totalRenta Decimal @default(0.00) @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2) // totalIva + totalRenta; lo que se resta a pagarle al proveedor
+
+  estado EstadoFactura @default(CREADA)
+
+  detalles  RetencionDetalle[]
+  createdAt DateTime           @default(now())
+}
+
+model RetencionDetalle {
+  id          Int       @id @default(autoincrement())
+  retencionId Int
+  retencion   Retencion @relation(fields: [retencionId], references: [id])
+
+  tipoImpuesto  TipoImpuestoRetenido
+  // Puramente informativa/organizativa — ayuda a elegir el código correcto
+  // (la tabla SRI de códigos ya distingue bien/servicio implícitamente) y se
+  // muestra en el RIDE y en el Reporteador. NO determina el porcentaje: ese
+  // sigue siendo siempre manual, igual que codigoRetencion.
+  clasificacion ClasificacionRetencion
+
+  // Código de la tabla oficial de porcentajes de retención del SRI (ej.
+  // "343", "312"...). A PROPÓSITO no hay catálogo interno de códigos: el SRI
+  // los actualiza periódicamente y mantenerlos acá sería un riesgo de
+  // compliance. Se ingresan a mano, junto con el porcentaje, al generar la
+  // retención.
+  codigoRetencion String
+
+  baseImponible Decimal @db.Decimal(10, 2)
+  porcentaje    Decimal @db.Decimal(5, 2) // ej. 30.00, 1.75, 100.00
+  valorRetenido Decimal @db.Decimal(10, 2) // baseImponible * porcentaje / 100
+}
+
+enum TipoImpuestoRetenido {
+  IVA
+  RENTA
+}
+
+enum ClasificacionRetencion {
+  BIEN
+  SERVICIO
+}
+
+// Guía de Remisión: comprobante electrónico SRI (codDoc "06") que acompaña
+// físicamente el transporte de la mercadería ya vendida (control policial/
+// SRI en carretera). A diferencia de Retención, no mueve dinero ni stock —
+// el stock ya se descontó al crear la Factura; esto es puramente el
+// documento de transporte. Nace siempre de una Factura ya AUTORIZADA (igual
+// gate que NotaCredito), pero a propósito NO es 1 a 1: una misma factura
+// puede repartirse en varios viajes/camiones, cada uno con su propia guía.
+model GuiaRemision {
+  id           Int      @id @default(autoincrement())
+  secuencial   String   @unique // ej. "001-001-000000001", bajo tipoComprobante "06"
+  claveAcceso  String?  @unique
+  fechaEmision DateTime @default(now())
+
+  facturaId Int
+  factura   Factura @relation(fields: [facturaId], references: [id])
+
+  // Destinatario (a quién se le entrega la mercadería) — se copia del
+  // cliente de la factura al generar la guía, pero es editable: la dirección
+  // de entrega de un envío puntual puede no coincidir con la dirección
+  // fiscal registrada del cliente.
+  destinatarioTipoIdentificacion String // mismo catálogo que Cliente.tipoIdentificacion: RUC | CEDULA | PASAPORTE | CONSUMIDOR_FINAL
+  destinatarioIdentificacion     String
+  destinatarioRazonSocial        String
+  destinatarioDireccion          String
+  // Catálogo corto y fijo en código (a propósito, a diferencia de
+  // codigoRetencion): el motivo de traslado del SRI es estable, no se
+  // actualiza periódicamente como sí lo hacen las tablas de retención.
+  motivoTraslado                 String
+  ruta                           String?
+
+  // Transportista y datos del traslado (bloque infoGuiaRemision del SRI).
+  dirPartida                      String
+  transportistaTipoIdentificacion String // RUC | CEDULA | PASAPORTE
+  transportistaIdentificacion     String
+  transportistaRazonSocial        String
+  placa                           String
+  fechaIniTransporte              DateTime
+  fechaFinTransporte              DateTime
+
+  estado EstadoFactura @default(CREADA) // reusa el mismo enum que Factura/NotaCredito/Retencion
+
+  detalles  GuiaRemisionDetalle[]
+  createdAt DateTime              @default(now())
+}
+
+model GuiaRemisionDetalle {
+  id             Int          @id @default(autoincrement())
+  guiaRemisionId Int
+  guiaRemision   GuiaRemision @relation(fields: [guiaRemisionId], references: [id])
+
+  productoId  Int
+  producto    Producto @relation(fields: [productoId], references: [id])
+  cantidad    Int
+  descripcion String // copiado del producto al generar la guía, por si el nombre cambia después
+}
+
+// --- Módulo de RETENCIONES RECIBIDAS ---
+// El reverso de Retencion: acá no somos quienes emitimos el comprobante, es
+// un CLIENTE (agente de retención) quien nos retuvo IVA/Renta al pagar una
+// factura y nos entregó su propio comprobante ya generado y enviado al SRI
+// por él. Por eso esto NO tiene clave de acceso, XML, firma ni envío — es
+// solo el registro interno de lo que ya recibimos, para poder declarar el
+// Formulario 104 completo (ver backend/src/routes/reportes.ts).
+model RetencionRecibida {
+  id                Int      @id @default(autoincrement())
+  numeroComprobante String // número del comprobante que el CLIENTE emitió, no lo generamos nosotros
+  fechaEmision      DateTime // fecha de ESE comprobante
+
+  // Relación 1 a 1: como mucho una retención recibida por factura.
+  facturaId Int     @unique
+  factura   Factura @relation(fields: [facturaId], references: [id])
+
+  totalIva   Decimal @default(0.00) @db.Decimal(10, 2)
+  totalRenta Decimal @default(0.00) @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2) // totalIva + totalRenta; lo que el cliente descontó al pagarnos
+
+  detalles  RetencionRecibidaDetalle[]
+  createdAt DateTime                   @default(now())
+}
+
+model RetencionRecibidaDetalle {
+  id                  Int               @id @default(autoincrement())
+  retencionRecibidaId Int
+  retencionRecibida   RetencionRecibida @relation(fields: [retencionRecibidaId], references: [id])
+
+  tipoImpuesto    TipoImpuestoRetenido
+  clasificacion   ClasificacionRetencion
+  codigoRetencion String
+  baseImponible   Decimal                @db.Decimal(10, 2)
+  porcentaje      Decimal                @db.Decimal(5, 2)
+  valorRetenido   Decimal                @db.Decimal(10, 2)
+}
+
+// --- Módulo de PROFORMAS ---
+// Una cotización con el mismo formato visual que una Factura, pero que NO
+// es un comprobante electrónico (no tiene clave de acceso, no se envía al
+// SRI) y NO descuenta stock — los precios se calculan con el precio/IVA
+// actual del producto, pero es solo informativo hasta que el cliente acepta.
+// Por eso usa su propia numeración ("PRO"), independiente de la de Factura/
+// NotaVenta/NotaCredito. Cuando el cliente confirma, se "convierte" en una
+// Factura o Nota de Venta real (ahí sí se valida y descuenta stock).
+model Proforma {
+  id           Int       @id @default(autoincrement())
+  secuencial   String    @unique // ej. "PRO-001-001-000000001"
+  fechaEmision DateTime  @default(now())
+  validaHasta  DateTime? // opcional: hasta cuándo se sostienen estos precios
+
+  clienteId Int
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  subtotal0  Decimal @db.Decimal(10, 2)
+  subtotal12 Decimal @db.Decimal(10, 2)
+  iva        Decimal @db.Decimal(10, 2)
+  total      Decimal @db.Decimal(10, 2)
+
+  estado EstadoProforma @default(CREADA)
+
+  // Si se convirtió, queda el rastro de en qué se convirtió — nunca las dos a la vez.
+  facturaConvertidaId   Int?       @unique
+  facturaConvertida     Factura?   @relation(fields: [facturaConvertidaId], references: [id])
+  notaVentaConvertidaId Int?       @unique
+  notaVentaConvertida   NotaVenta? @relation(fields: [notaVentaConvertidaId], references: [id])
+
+  detalles ProformaDetalle[]
+
+  createdAt DateTime @default(now())
+}
+
+model ProformaDetalle {
+  id         Int      @id @default(autoincrement())
+  proformaId Int
+  proforma   Proforma @relation(fields: [proformaId], references: [id])
+
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id])
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  ivaValor       Decimal  @db.Decimal(10, 2)
+}
+
+enum EstadoProforma {
+  CREADA
+  ANULADA
+  CONVERTIDA
+}
+
+enum EstadoCompra {
+  REGISTRADA
+  ANULADA
+}
+
+// --- Módulo de CONTABILIDAD (partida doble) ---
+// Plan de cuentas + libro diario. Los asientos se generan automáticamente al
+// crear/anular Factura, NotaVenta, NotaCredito, Compra, Pago y MovimientoCaja
+// (ver backend/src/utils/asientos.ts + wiring en cada ruta), más asientos
+// MANUALES para todo lo que el sistema no documenta solo (arriendo, sueldos,
+// ajustes). El costo de ventas SÍ se postea automáticamente por venta
+// (lineasPorCostoVenta en utils/contabilidad.ts), usando el mismo costo
+// promedio ponderado por producto que ya mantiene utils/costeoInventario.ts
+// — no hace falta un ajuste manual aparte a fin de período.
+enum TipoCuentaContable {
+  ACTIVO
+  PASIVO
+  PATRIMONIO
+  INGRESO
+  COSTO
+  GASTO
+}
+
+enum NaturalezaCuenta {
+  DEUDORA // aumenta con Debe: Activo, Costo, Gasto
+  ACREEDORA // aumenta con Haber: Pasivo, Patrimonio, Ingreso
+}
+
+model CuentaContable {
+  id         Int                @id @default(autoincrement())
+  codigo     String             @unique // ej. "1.1.01", jerárquico por convención de texto
+  nombre     String
+  tipo       TipoCuentaContable
+  naturaleza NaturalezaCuenta
+
+  cuentaPadreId Int?
+  cuentaPadre   CuentaContable?  @relation("Jerarquia", fields: [cuentaPadreId], references: [id])
+  subCuentas    CuentaContable[] @relation("Jerarquia")
+
+  // false = cuenta de agrupación (organiza el plan, nunca recibe una línea
+  // de asiento directamente). Todas las cuentas sembradas hoy son hojas
+  // (true) — el campo queda listo para cuando se agregue jerarquía real.
+  permiteMovimiento Boolean  @default(true)
+  activa            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  lineas LineaAsiento[]
+}
+
+enum OrigenAsiento {
+  FACTURA
+  NOTA_VENTA
+  NOTA_CREDITO
+  COMPRA
+  DEVOLUCION_COMPRA
+  PAGO
+  MOVIMIENTO_CAJA
+  MANUAL
+  NOMINA
+}
+
+// Un asiento nunca se edita ni se borra una vez creado — un error se corrige
+// con su reverso (mismo criterio "nunca editar, solo revertir" que ya usa
+// todo este repo, ver MovimientoInventario de una compra anulada).
+model AsientoContable {
+  id          Int      @id @default(autoincrement())
+  numero      String   @unique // vía Secuencial con tipoComprobante sintético "ASIENTO"
+  fecha       DateTime @default(now())
+  descripcion String
+
+  origen   OrigenAsiento
+  // Referencia libre SIN FK al documento que lo generó (mismo criterio que
+  // RegistroAuditoria.entidadId): el asiento debe sobrevivir aunque el
+  // documento se borre algún día, y "origen" dice a qué tabla apunta.
+  origenId Int?
+
+  asientoRevertidoId Int?             @unique
+  asientoRevertido   AsientoContable? @relation("Reversion", fields: [asientoRevertidoId], references: [id])
+  asientoReversor    AsientoContable? @relation("Reversion")
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  lineas    LineaAsiento[]
+  createdAt DateTime       @default(now())
+}
+
+model LineaAsiento {
+  id        Int             @id @default(autoincrement())
+  asientoId Int
+  asiento   AsientoContable @relation(fields: [asientoId], references: [id])
+
+  cuentaId Int
+  cuenta   CuentaContable @relation(fields: [cuentaId], references: [id])
+
+  debe  Decimal @default(0.00) @db.Decimal(10, 2)
+  haber Decimal @default(0.00) @db.Decimal(10, 2)
+  glosa String? // detalle opcional de la línea, ej. "Factura 001-001-000000005"
+}
+
+// --- Módulo de NÓMINA (Ecuador) ---
+// Catálogo base: cada empleado tiene su sueldo, cargo y fecha de ingreso —
+// de acá se calculan el rol de pagos mensual, décimos, vacaciones,
+// utilidades y liquidación. No tiene relación con Usuario (login al
+// sistema): un empleado no necesariamente tiene acceso al sistema, y un
+// Usuario (ej. un contador externo) no necesariamente cobra nómina acá.
+model Empleado {
+  id            Int       @id @default(autoincrement())
+  cedula        String    @unique
+  nombres       String
+  apellidos     String
+  cargo         String
+  fechaIngreso  DateTime
+  fechaSalida   DateTime?
+  sueldoMensual Decimal   @db.Decimal(10, 2)
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  // Para el reparto de utilidades (5% según cargas familiares, ver
+  // utils/utilidades.ts) — cuántos dependientes económicos declara.
+  cargasFamiliares Int @default(0)
+
+  // Fondo de reserva (8.33%, desde el 2do año de servicio continuo): si es
+  // true, se paga mensualmente dentro del rol de pagos; si es false (default
+  // legal cuando el empleado no eligió mensualizarlo), el IESS lo acumula
+  // aparte y no genera ningún valor a pagar mensualmente en este sistema.
+  fondoReservaMensualizado Boolean @default(false)
+
+  // Credenciales de marcación de asistencia (ver routes/marcaciones.ts) —
+  // INDEPENDIENTES de Usuario/JWT a propósito: un empleado no
+  // necesariamente tiene cuenta de acceso al sistema, pero sí puede
+  // necesitar marcar entrada/salida desde su celular. pinHash queda null
+  // hasta que un admin le asigne un PIN; intentosFallidosPin/
+  // bloqueadoHastaPin replican el mismo candado de fuerza bruta que ya usa
+  // Usuario.intentosFallidos/bloqueadoHasta en el login (ver routes/auth.ts).
+  pinHash             String?
+  intentosFallidosPin Int       @default(0)
+  bloqueadoHastaPin   DateTime?
+
+  // Horario esperado ("HH:MM"), opcional — si no se configura, las
+  // marcaciones de este empleado nunca se marcan como tardanza (no hay
+  // contra qué comparar). Ver utils/geocercas.ts / routes/marcaciones.ts.
+  horaEntradaEsperada String?
+  horaSalidaEsperada  String?
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  rolesDePagos     RolDePagos[]
+  decimosTerceros  DecimoTercero[]
+  decimosCuartos   DecimoCuarto[]
+  vacaciones       Vacacion[]
+  utilidadDetalles UtilidadDetalle[]
+  liquidacion      Liquidacion?
+  marcaciones      Marcacion[]
+  rutasVisita      RutaVisita[]
+  // Lado inverso de Usuario.empleadoId — un Empleado puede o no tener
+  // cuenta de acceso vinculada (ver comentario en Usuario).
+  usuario          Usuario?
+}
+
+// Un registro por empleado por mes — el corazón del módulo. "Pagar" genera
+// su propio asiento contable (ver utils/contabilidad.ts:lineasPorNomina),
+// mismo criterio que ya usa Retención con crearPagoConAsiento.
+model RolDePagos {
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+  anio       Int
+  mes        Int // 1-12
+
+  sueldoBase                Decimal @db.Decimal(10, 2)
+  horasSuplementarias       Int     @default(0) // recargo 50%
+  horasExtraordinarias      Int     @default(0) // recargo 100%
+  valorHorasSuplementarias  Decimal @default(0.00) @db.Decimal(10, 2)
+  valorHorasExtraordinarias Decimal @default(0.00) @db.Decimal(10, 2)
+  otrosIngresos             Decimal @default(0.00) @db.Decimal(10, 2) // comisiones/bonos, manual
+  fondoReservaValor         Decimal @default(0.00) @db.Decimal(10, 2) // solo si empleado.fondoReservaMensualizado
+  totalIngresos             Decimal @db.Decimal(10, 2)
+
+  aportePersonalIess     Decimal @db.Decimal(10, 2) // se descuenta al empleado
+  aportePatronalIess     Decimal @db.Decimal(10, 2) // informativo — lo paga la empresa, no se descuenta
+  otrosDescuentos        Decimal @default(0.00) @db.Decimal(10, 2) // anticipos/préstamos, manual
+  otrosDescuentosDetalle String?
+  totalDescuentos        Decimal @db.Decimal(10, 2)
+
+  netoAPagar Decimal   @db.Decimal(10, 2)
+  estado     String    @default("PENDIENTE") // PENDIENTE | PAGADO
+  fechaPago  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([empleadoId, anio, mes])
+}
+
+// Bono navideño: (suma de todo lo percibido 1-dic a 30-nov) / 12.
+model DecimoTercero {
+  id                   Int       @id @default(autoincrement())
+  empleadoId           Int
+  empleado             Empleado  @relation(fields: [empleadoId], references: [id])
+  anio                 Int
+  totalIngresosPeriodo Decimal   @db.Decimal(10, 2)
+  valor                Decimal   @db.Decimal(10, 2)
+  mensualizado         Boolean   @default(false)
+  estado               String    @default("PENDIENTE") // PENDIENTE | PAGADO
+  fechaPago            DateTime?
+  createdAt            DateTime  @default(now())
+
+  @@unique([empleadoId, anio])
+}
+
+// Bono escolar: 1 SBU/año, proporcional a meses laborados en el período de
+// la región del empleado (ver Sucursal.region).
+model DecimoCuarto {
+  id             Int       @id @default(autoincrement())
+  empleadoId     Int
+  empleado       Empleado  @relation(fields: [empleadoId], references: [id])
+  anio           Int
+  region         String // "SIERRA_ORIENTE" | "COSTA_GALAPAGOS", copiado de la sucursal al calcular
+  mesesLaborados Int
+  valor          Decimal   @db.Decimal(10, 2)
+  mensualizado   Boolean   @default(false)
+  estado         String    @default("PENDIENTE") // PENDIENTE | PAGADO
+  fechaPago      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([empleadoId, anio])
+}
+
+// Registro de vacaciones tomadas (o pagadas en dinero sin gozarlas) — el
+// saldo disponible se CALCULA (días acumulados por antigüedad menos la
+// suma de diasTomados históricos), no se guarda como campo aparte.
+model Vacacion {
+  id          Int      @id @default(autoincrement())
+  empleadoId  Int
+  empleado    Empleado @relation(fields: [empleadoId], references: [id])
+  fechaInicio DateTime
+  fechaFin    DateTime
+  diasTomados Int
+  valorPagado Decimal? @db.Decimal(10, 2) // si se pagó en dinero en vez de gozarlas
+  createdAt   DateTime @default(now())
+}
+
+// Reparto anual de utilidades (15% de la utilidad neta de la empresa,
+// reusa el cálculo de GET /contabilidad/estado-resultados): 10% según días
+// trabajados + 5% según cargas familiares, un detalle por empleado activo
+// ese año.
+model Utilidad {
+  id                  Int      @id @default(autoincrement())
+  anio                Int      @unique
+  utilidadNetaEmpresa Decimal  @db.Decimal(10, 2)
+  monto15Porciento    Decimal  @db.Decimal(10, 2)
+  fechaCalculo        DateTime @default(now())
+  createdAt           DateTime @default(now())
+
+  detalles UtilidadDetalle[]
+}
+
+model UtilidadDetalle {
+  id         Int      @id @default(autoincrement())
+  utilidadId Int
+  utilidad   Utilidad @relation(fields: [utilidadId], references: [id])
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  diasTrabajados Int
+  valorPorDias   Decimal @db.Decimal(10, 2) // parte del 10%
+  valorPorCargas Decimal @db.Decimal(10, 2) // parte del 5%
+  totalEmpleado  Decimal @db.Decimal(10, 2)
+
+  @@unique([utilidadId, empleadoId])
+}
+
+// Finiquito al terminar la relación laboral. Es una CALCULADORA/reporte —
+// no dispara ningún pago ni asiento automático (ver utils/liquidacion.ts):
+// los montos de indemnización/desahucio deben confirmarse con un
+// profesional antes de pagarse de verdad, las fórmulas han cambiado con
+// reformas laborales.
+model Liquidacion {
+  id         Int      @id @default(autoincrement())
+  empleadoId Int      @unique
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  fechaSalida   DateTime
+  motivoSalida  String // DESPIDO_INTEMPESTIVO | RENUNCIA_VOLUNTARIA | MUTUO_ACUERDO | VISTO_BUENO | OTRO
+  aniosServicio Decimal  @db.Decimal(5, 2)
+
+  vacacionesPendientesDias  Int
+  vacacionesPendientesValor Decimal @db.Decimal(10, 2)
+  decimoTerceroProporcional Decimal @db.Decimal(10, 2)
+  decimoCuartoProporcional  Decimal @db.Decimal(10, 2)
+  indemnizacion             Decimal @default(0.00) @db.Decimal(10, 2)
+  bonificacionDesahucio     Decimal @default(0.00) @db.Decimal(10, 2)
+  totalLiquidacion          Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+}
+
+enum TipoMarcacion {
+  ENTRADA
+  SALIDA
+}
+
+// Marcación de entrada/salida de un empleado (ver routes/marcaciones.ts) —
+// se registra desde su propio celular, sin necesitar cuenta de Usuario.
+// Se guarda SIEMPRE, incluso si quedó fuera de la geocerca configurada o sin
+// coordenadas (dentroDeGeocerca queda false/null respectivamente) — la
+// geocerca es una señal para que un admin revise el reporte, no un bloqueo
+// (ver utils/geocercas.ts y el "Alcance de esta ronda" del plan).
+model Marcacion {
+  id         Int           @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado      @relation(fields: [empleadoId], references: [id])
+  tipo       TipoMarcacion
+  fecha      DateTime      @default(now())
+
+  latitud          Decimal? @db.Decimal(9, 6)
+  longitud         Decimal? @db.Decimal(9, 6)
+  distanciaMetros  Decimal? @db.Decimal(10, 2)
+  // null = no se pudo evaluar (sin geocerca configurada en la sucursal, o
+  // sin coordenadas porque el celular no compartió ubicación).
+  dentroDeGeocerca Boolean?
+  // Solo se evalúa en tipo ENTRADA, y solo si el empleado tiene
+  // horaEntradaEsperada configurada — si no, queda null (no evaluado).
+  tardanza         Boolean?
+
+  // true = un admin la creó a mano (empleado olvidó marcar), no un punch
+  // real desde el celular — ver POST /marcaciones (autenticado).
+  creadaManualmente Boolean @default(false)
+  observacion       String?
+
+  createdAt DateTime @default(now())
+}
+
+// --- Módulo de VISITAS TÉCNICAS ---
+// Ruta diaria de un empleado técnico (una por empleado por día), armada a
+// mano por un despachador con las ubicaciones que el cliente ya mandó por
+// WhatsApp (sin integración automática esta ronda, ver
+// utils/rutaVisitas.ts) y ordenada automáticamente por cercanía en línea
+// recta. El técnico ve solo SU ruta (ver Usuario.empleadoId) y confirma
+// cada parada con su propia ubicación al llegar.
+model RutaVisita {
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+  fecha      DateTime // día calendario de la ruta, hora local 00:00
+  createdAt  DateTime @default(now())
+
+  visitas VisitaTecnica[]
+
+  @@unique([empleadoId, fecha])
+}
+
+enum EstadoVisita {
+  PENDIENTE
+  COMPLETADA
+  OMITIDA
+}
+
+// Una parada dentro de una ruta — a propósito puede o no estar vinculada a
+// un Cliente ya registrado (ver "Alcance" del plan: un prospecto sin
+// registrar formalmente también puede recibir una visita técnica).
+model VisitaTecnica {
+  id           Int        @id @default(autoincrement())
+  rutaVisitaId Int
+  rutaVisita   RutaVisita @relation(fields: [rutaVisitaId], references: [id])
+
+  clienteId      Int?
+  cliente        Cliente? @relation(fields: [clienteId], references: [id])
+  // Copiado de cliente.razonSocial al crear si clienteId viene seteado; si
+  // no, texto libre (nombre de un prospecto sin registrar).
+  nombreContacto String
+  direccion      String? // texto libre, ej. copiado del mensaje de WhatsApp
+
+  // Ubicación PLANEADA — la que el cliente mandó por WhatsApp, ingresada a
+  // mano en el mapa por el despachador (ver components/MapaGeocerca.tsx).
+  latitud   Decimal @db.Decimal(9, 6)
+  longitud  Decimal @db.Decimal(9, 6)
+  // Posición en la ruta, calculada una sola vez al crearla (ver
+  // utils/rutaVisitas.ts:ordenarPorCercania) — no se recalcula sola si se
+  // agregan paradas después.
+  orden     Int
+  // Parada agregada de última hora a una ruta que ya existía (ver POST
+  // /visitas/rutas/:id/paradas) — ej. un cliente llama pidiendo una visita
+  // urgente el mismo día. Solo cambia cómo se resalta en pantalla (para que
+  // el técnico la note); no altera el orden ni ninguna otra regla.
+  esUrgente Boolean @default(false)
+
+  estado EstadoVisita @default(PENDIENTE)
+
+  // Se llenan cuando el técnico presiona "Llegué" (ver PATCH
+  // /visitas/:id/llegada) — ubicación REAL en el momento de la llegada,
+  // para comparar contra la planeada.
+  fechaLlegadaReal DateTime?
+  latitudLlegada   Decimal?  @db.Decimal(9, 6)
+  longitudLlegada  Decimal?  @db.Decimal(9, 6)
+  // Metros entre la ubicación planeada y la real — mismo cálculo
+  // (Haversine) que ya usa Marcacion.distanciaMetros, ver
+  // utils/geocercas.ts:calcularDistanciaMetros.
+  distanciaAlPunto Decimal?  @db.Decimal(10, 2)
+
+  observaciones String?
+  createdAt     DateTime @default(now())
+
+  // Acta de instalación — se llena DESPUÉS de "Llegué" (ver PATCH
+  // /visitas/:id/detalle-trabajo), no es obligatoria para marcar la visita
+  // como completada: registra qué se hizo, qué equipos quedaron en la
+  // vivienda del cliente y dos fotos de respaldo (trabajo + vivienda). Las
+  // fotos se guardan en disco como el resto de imágenes del sistema (ver
+  // Producto.imagenUrl) — acá solo la ruta relativa.
+  descripcionTrabajo String?
+  fotoTrabajoUrl     String?
+  fotoViviendaUrl    String?
+  equiposDejados     EquipoDejadoVisita[]
+}
+
+// Un ítem dejado en la vivienda durante la visita (router Mikrotik, ONU,
+// cable, etc.) — varios por visita, por eso es una tabla aparte y no campos
+// sueltos en VisitaTecnica. A propósito NO está vinculado a Producto/stock:
+// esto es un acta de lo que el técnico dice que dejó, no un movimiento de
+// inventario formal (esa es una venta/traslado, con su propio flujo ya
+// existente) — mezclar los dos haría que cualquier error de tipeo acá
+// descuadre el kardex.
+model EquipoDejadoVisita {
+  id       Int           @id @default(autoincrement())
+  visitaId Int
+  visita   VisitaTecnica @relation(fields: [visitaId], references: [id])
+
+  tipo   String // ej. "Router Mikrotik", "Cable UTP", "ONU" — texto libre
+  modelo String?
+  // Para equipos de red, en la práctica esto ES la dirección MAC del
+  // equipo — se guarda como texto libre porque a veces el técnico anota el
+  // serial impreso en la caja en vez de la MAC.
+  serial String?
+
+  createdAt DateTime @default(now())
+}
+
+// Diccionario editable del "Buscador dinámico" de Reportes (ver
+// frontend/src/utils/interpretarBusqueda.ts). El buscador reconoce un
+// vocabulario fijo de palabras por categoría (ej. "suspendidos"/"cortados"
+// disparan la categoría ACTIVOS_SUSPENDIDOS) — en vez de que cada palabra
+// nueva que la gente use tenga que pedirse como cambio de código, el admin
+// puede agregarlas acá mismo desde Ajustes. "categoria" es uno de los
+// valores fijos que el parser ya entiende (no es libre — ver
+// CategoriaSinonimoBusqueda en interpretarBusqueda.ts, que debe mantenerse
+// en sincro con este enum); "palabra" es lo que se agrega. La palabra se
+// guarda ya en minúsculas y sin tildes (mismo criterio que usa el parser
+// para comparar), para no tener que normalizarla en cada búsqueda.
+enum CategoriaSinonimoBusqueda {
+  ACTIVOS
+  SUSPENDIDOS
+  PAGARON
+  NO_PAGARON
+  VENTAS
+  CLIENTES
+}
+
+model SinonimoBusqueda {
+  id        Int                       @id @default(autoincrement())
+  categoria CategoriaSinonimoBusqueda
+  palabra   String
+  createdAt DateTime                  @default(now())
+
+  // Una misma palabra puede repetirse en categorías distintas (rarísimo,
+  // pero no hay razón técnica para prohibirlo) — lo que no tiene sentido es
+  // agregar la misma palabra dos veces a la MISMA categoría.
+  @@unique([categoria, palabra])
+}

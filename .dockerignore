@@ -1,0 +1,13 @@
+# No copiar nunca datos reales ni secretos de desarrollo dentro de la imagen
+# de la prueba — mismas exclusiones que ya tiene backend/.gitignore.
+node_modules/
+dist/
+.env
+*.p12
+*.pem
+test-cert/
+comprobantes-autorizados/
+backups/
+empresas-registry.json
+data/
+uploads/

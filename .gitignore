@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.p12
+*.pem
+test-cert/
+comprobantes-autorizados/
+backups/
+empresas-registry.json
+data/
+uploads/

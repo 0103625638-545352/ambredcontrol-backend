@@ -21,6 +21,7 @@ import { precioParaCliente } from "../utils/precios";
 import { lineasPorVenta, lineasPorCostoVenta } from "../utils/contabilidad";
 import { crearAsiento, revertirAsientoDeOrigen } from "../utils/asientos";
 import { crearPagoConAsiento } from "../utils/pagos";
+import { validarPlanCuotas, type CuotaInput } from "../utils/cuotas";
 
 export const notasVentaRouter = Router();
 
@@ -36,6 +37,8 @@ interface CrearNotaVentaBody {
   items: ItemCarrito[];
   aplicaIva?: boolean; // en Ecuador, la nota de venta normalmente NO desglosa IVA
   fechaVencimiento?: string; // opcional: solo tiene sentido si la venta queda con saldo pendiente
+  // OJO: el plan de cuotas NO se crea acá — se crea en POST /:id/pagos,
+  // junto con el abono inicial (ver el comentario en ese handler más abajo).
 }
 
 // GET /notas-venta
@@ -77,7 +80,8 @@ notasVentaRouter.get("/:id", async (req: Request, res: Response) => {
       include: {
         cliente: true,
         detalles: { include: { producto: true } },
-        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } },
+        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+        cuotas: { orderBy: { numero: "asc" } },
       },
     });
     if (!notaVenta) return res.status(404).json({ error: "Nota de venta no encontrada" });
@@ -94,13 +98,40 @@ notasVentaRouter.get("/:id", async (req: Request, res: Response) => {
 notasVentaRouter.post("/:id/pagos", requirePermiso("ventas"), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { monto, formaPago, referencia, cuentaBancariaId } = req.body;
+    const {
+      monto,
+      formaPago,
+      referencia,
+      cuentaBancariaId,
+      bancoOrigenId,
+      numeroCuentaOrigen,
+      tarjetaUltimosDigitos,
+      tarjetaTipo,
+      tarjetaReferencia,
+      tarjetaLote,
+      chequeNumero,
+      chequeFechaCobro,
+      cuotas,
+    } = req.body;
 
     if (typeof monto !== "number" || monto <= 0) {
       return res.status(400).json({ error: "monto debe ser un número mayor a 0" });
     }
     if (!formaPago) {
       return res.status(400).json({ error: "formaPago es obligatorio" });
+    }
+    if (cuotas && cuotas.length > 0) {
+      try {
+        validarPlanCuotas(cuotas);
+      } catch (error: any) {
+        if (error.message === "CUOTAS_VACIAS") return res.status(400).json({ error: "El plan de cuotas no puede estar vacío" });
+        if (error.message === "CUOTAS_NUMERO_INVALIDO") {
+          return res.status(400).json({ error: "Las cuotas deben numerarse 1, 2, 3... sin saltos ni repetidos" });
+        }
+        if (error.message === "CUOTAS_MONTO_INVALIDO") return res.status(400).json({ error: "El monto de cada cuota debe ser mayor a 0" });
+        if (error.message === "CUOTAS_FECHA_INVALIDA") return res.status(400).json({ error: "Cada cuota necesita una fecha de vencimiento válida" });
+        throw error;
+      }
     }
     const exigeCuentaBancaria = ["TRANSFERENCIA", "TARJETA", "CHEQUE"].includes(formaPago);
     if (exigeCuentaBancaria) {
@@ -125,6 +156,19 @@ notasVentaRouter.post("/:id/pagos", requirePermiso("ventas"), async (req: Reques
       return res.status(400).json({ error: `El monto supera el saldo pendiente ($${saldoPendiente.toFixed(2)})` });
     }
 
+    // Si esta nota de venta tiene un plan de Cuotas, el cobro es ESTRICTO:
+    // solo se puede pagar la próxima cuota pendiente (en orden), por su
+    // monto EXACTO — mismo criterio que registrarPagoDeFactura en facturas.ts.
+    const proximaCuota = await prisma.cuota.findFirst({
+      where: { notaVentaId: id, estado: "PENDIENTE" },
+      orderBy: { numero: "asc" },
+    });
+    if (proximaCuota && !montoDecimal.equals(proximaCuota.monto)) {
+      return res.status(400).json({
+        error: `Este documento tiene un plan de cuotas: hay que pagar la cuota ${proximaCuota.numero} por $${proximaCuota.monto.toFixed(2)} exacto, en orden`,
+      });
+    }
+
     const notaVentaActualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await crearPagoConAsiento(tx, {
         notaVentaId: id,
@@ -132,14 +176,42 @@ notasVentaRouter.post("/:id/pagos", requirePermiso("ventas"), async (req: Reques
         formaPago,
         referencia,
         cuentaBancariaId: exigeCuentaBancaria ? cuentaBancariaId : undefined,
+        cuotaId: proximaCuota?.id,
+        bancoOrigenId,
+        numeroCuentaOrigen,
+        tarjetaUltimosDigitos,
+        tarjetaTipo,
+        tarjetaReferencia,
+        tarjetaLote,
+        chequeNumero,
+        chequeFechaCobro,
         descripcion: `Cobro nota de venta ${notaVenta.secuencial}`,
         usuarioId: req.usuario!.usuarioId,
       });
+      if (proximaCuota) {
+        await tx.cuota.update({ where: { id: proximaCuota.id }, data: { estado: "PAGADA" } });
+      }
+      // El plan de cuotas del SALDO RESTANTE se crea acá, DESPUÉS de aplicar
+      // este pago — mismo criterio que registrarPagoDeFactura en
+      // facturas.ts (ver el porqué en el comentario de ese archivo).
+      if (cuotas && cuotas.length > 0) {
+        await tx.cuota.createMany({
+          data: cuotas.map((c: CuotaInput) => ({
+            notaVentaId: id,
+            numero: c.numero,
+            monto: c.monto,
+            fechaVencimiento: new Date(c.fechaVencimiento),
+          })),
+        });
+      }
       const nuevoMontoPagado = notaVenta.montoPagado.add(montoDecimal);
       return tx.notaVenta.update({
         where: { id },
         data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, notaVenta.total) },
-        include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+        include: {
+          pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+          cuotas: { orderBy: { numero: "asc" } },
+        },
       });
     });
 
@@ -167,12 +239,20 @@ notasVentaRouter.delete("/:id/pagos/:pagoId", async (req: Request, res: Response
 
     const notaVentaActualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.pago.delete({ where: { id: pagoId } });
+      // Si este pago había liquidado una Cuota, la reabrimos — mismo
+      // criterio que en facturas.ts.
+      if (pago.cuotaId) {
+        await tx.cuota.update({ where: { id: pago.cuotaId }, data: { estado: "PENDIENTE" } });
+      }
       await revertirAsientoDeOrigen(tx, "PAGO", pagoId, req.usuario!.usuarioId);
       const nuevoMontoPagado = notaVenta.montoPagado.sub(pago.monto);
       const actualizada = await tx.notaVenta.update({
         where: { id },
         data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, notaVenta.total) },
-        include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+        include: {
+          pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+          cuotas: { orderBy: { numero: "asc" } },
+        },
       });
 
       await registrarAuditoria(tx, {

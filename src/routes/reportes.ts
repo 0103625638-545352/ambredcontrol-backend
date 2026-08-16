@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../db";
 import { Prisma } from "@prisma/client";
-import { calcularDiasAtraso, bucketMora, type BucketMora } from "../utils/vencimientos";
-import { fechaLocalDeString, aClaveDia } from "../utils/rangoFechas";
+import { calcularDiasAtraso, calcularDiasParaVencer, bucketMora, type BucketMora } from "../utils/vencimientos";
+import { fechaLocalDeString, aClaveDia, rangoDelMes } from "../utils/rangoFechas";
 import { listarIpsSuspendidas } from "../utils/mikrotik";
 
 export const reportesRouter = Router();
@@ -277,6 +277,55 @@ reportesRouter.get("/cuentas-por-cobrar", async (_req: Request, res: Response) =
   }
 });
 
+// GET /reportes/cuotas-por-cobrar
+// Control de proximidad de cobro para ventas con plan de Cuotas (ver modelo
+// Cuota en schema.prisma) — a diferencia de /cuentas-por-cobrar (que ve el
+// documento completo), esto es por CUOTA individual: cada una con su propia
+// fecha, para saber exactamente cuál vence primero. Ordenado por fecha de
+// vencimiento ascendente (la más urgente primero) — solo cuotas PENDIENTE,
+// ya sea que falten días o que ya estén atrasadas.
+reportesRouter.get("/cuotas-por-cobrar", async (_req: Request, res: Response) => {
+  try {
+    const cuotas = await prisma.cuota.findMany({
+      where: { estado: "PENDIENTE" },
+      include: {
+        factura: { select: { id: true, secuencial: true, cliente: { select: { razonSocial: true } } } },
+        notaVenta: { select: { id: true, secuencial: true, cliente: { select: { razonSocial: true } } } },
+      },
+      orderBy: { fechaVencimiento: "asc" },
+    });
+
+    const ahora = new Date();
+    const detalle = cuotas.map((c: (typeof cuotas)[number]) => {
+      const documento = c.factura ?? c.notaVenta;
+      return {
+        id: c.id,
+        numero: c.numero,
+        monto: c.monto.toFixed(2),
+        fechaVencimiento: c.fechaVencimiento,
+        diasParaVencer: calcularDiasParaVencer(c.fechaVencimiento, ahora),
+        diasAtraso: calcularDiasAtraso(c.fechaVencimiento, "PENDIENTE", ahora),
+        tipo: c.factura ? ("FACTURA" as const) : ("NOTA_VENTA" as const),
+        documentoId: documento!.id,
+        secuencial: documento!.secuencial,
+        cliente: documento!.cliente.razonSocial,
+      };
+    });
+
+    res.json({
+      resumen: {
+        cantidadCuotas: detalle.length,
+        totalPorCobrar: cuotas.reduce((acc: Prisma.Decimal, c: (typeof cuotas)[number]) => acc.add(c.monto), new Prisma.Decimal(0)).toFixed(2),
+        vencidas: detalle.filter((c) => c.diasAtraso !== null).length,
+      },
+      cuotas: detalle,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al generar el reporte de cuotas por cobrar" });
+  }
+});
+
 // GET /reportes/cuentas-por-pagar
 // El reverso: compras a proveedores que todavía no hemos terminado de pagar.
 reportesRouter.get("/cuentas-por-pagar", async (_req: Request, res: Response) => {
@@ -334,6 +383,46 @@ reportesRouter.get("/cuentas-por-pagar", async (_req: Request, res: Response) =>
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al generar el reporte de cuentas por pagar" });
+  }
+});
+
+// GET /reportes/cuotas-por-pagar
+// El reverso de /reportes/cuotas-por-cobrar: control de proximidad por
+// CUOTA individual de un plan a plazos con un PROVEEDOR (ver modelo Cuota).
+reportesRouter.get("/cuotas-por-pagar", async (_req: Request, res: Response) => {
+  try {
+    const cuotas = await prisma.cuota.findMany({
+      where: { estado: "PENDIENTE", compraId: { not: null } },
+      include: {
+        compra: { select: { id: true, numeroFactura: true, proveedor: { select: { razonSocial: true } } } },
+      },
+      orderBy: { fechaVencimiento: "asc" },
+    });
+
+    const ahora = new Date();
+    const detalle = cuotas.map((c: (typeof cuotas)[number]) => ({
+      id: c.id,
+      numero: c.numero,
+      monto: c.monto.toFixed(2),
+      fechaVencimiento: c.fechaVencimiento,
+      diasParaVencer: calcularDiasParaVencer(c.fechaVencimiento, ahora),
+      diasAtraso: calcularDiasAtraso(c.fechaVencimiento, "PENDIENTE", ahora),
+      compraId: c.compra!.id,
+      numeroFactura: c.compra!.numeroFactura,
+      proveedor: c.compra!.proveedor.razonSocial,
+    }));
+
+    res.json({
+      resumen: {
+        cantidadCuotas: detalle.length,
+        totalPorPagar: cuotas.reduce((acc: Prisma.Decimal, c: (typeof cuotas)[number]) => acc.add(c.monto), new Prisma.Decimal(0)).toFixed(2),
+        vencidas: detalle.filter((c) => c.diasAtraso !== null).length,
+      },
+      cuotas: detalle,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al generar el reporte de cuotas por pagar" });
   }
 });
 
@@ -682,6 +771,200 @@ reportesRouter.get("/iva-formulario104", async (req: Request, res: Response) => 
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al generar el reporte de IVA" });
+  }
+});
+
+// El SRI usa códigos fijos para el tipo de identificación de cliente/
+// proveedor en el ATS — misma tabla que ya usa facturaXml.ts para el XML del
+// comprobante (04 RUC, 05 Cédula, 06 Pasaporte, 07 Consumidor Final). Se
+// repite acá (en vez de importarla) porque esta es la única otra ruta que la
+// necesita, y facturaXml.ts la mantiene privada a propósito.
+function codigoTipoIdentificacionATS(tipo: string): string {
+  const mapa: Record<string, string> = { RUC: "04", CEDULA: "05", PASAPORTE: "06", CONSUMIDOR_FINAL: "07" };
+  return mapa[tipo] ?? "05";
+}
+
+// GET /reportes/ats?anio=2026&mes=7
+// Insumo para armar el Anexo Transaccional Simplificado (ATS) que se declara
+// mensualmente al SRI — a propósito NO genera el XML oficial (esquema muy
+// extenso y con catálogos de códigos que el SRI actualiza periódicamente;
+// un código mal puesto acá sería un riesgo de compliance real), sino un
+// detalle por comprobante que el negocio o su contador pueden revisar y
+// cargar a mano en el DIMM Formularios. El período es SIEMPRE un mes
+// calendario (así lo exige el SRI), no un rango libre como el resto de
+// reportes de este archivo.
+//
+// "sustentoTributario" viene de Compra.sustentoTributario — obligatorio para
+// compras nuevas (ver POST /compras), pero las registradas ANTES de que
+// existiera ese campo lo tienen null; no es un error de este reporte.
+reportesRouter.get("/ats", async (req: Request, res: Response) => {
+  try {
+    const anio = Number(req.query.anio);
+    const mes = Number(req.query.mes);
+    if (!anio || !mes || mes < 1 || mes > 12) {
+      return res.status(400).json({ error: "anio y mes son obligatorios (mes entre 1 y 12)" });
+    }
+    const { desde, hasta } = rangoDelMes(anio, mes);
+    const rango = { gte: desde, lte: hasta };
+
+    const [facturas, notasVentaConIva, notasCredito, comprasList, retenciones, retencionesRecibidas, facturasAnuladas, notasCreditoAnuladas] =
+      await Promise.all([
+        prisma.factura.findMany({ where: { fechaEmision: rango, estado: { not: "ANULADA" } }, include: { cliente: true } }),
+        prisma.notaVenta.findMany({ where: { fechaEmision: rango, estado: { not: "ANULADA" }, aplicaIva: true }, include: { cliente: true } }),
+        prisma.notaCredito.findMany({
+          where: { fechaEmision: rango, estado: { not: "ANULADA" } },
+          include: { factura: { include: { cliente: true } } },
+        }),
+        prisma.compra.findMany({ where: { fechaEmision: rango, estado: { not: "ANULADA" } }, include: { proveedor: true } }),
+        prisma.retencion.findMany({
+          where: { fechaEmision: rango, estado: { not: "ANULADA" } },
+          include: { compra: { include: { proveedor: true } }, detalles: true },
+        }),
+        prisma.retencionRecibida.findMany({
+          where: { fechaEmision: rango },
+          include: { factura: { include: { cliente: true } }, detalles: true },
+        }),
+        prisma.factura.findMany({ where: { fechaEmision: rango, estado: "ANULADA" }, include: { cliente: true } }),
+        prisma.notaCredito.findMany({ where: { fechaEmision: rango, estado: "ANULADA" }, include: { factura: true } }),
+      ]);
+
+    const ventas = [
+      ...facturas.map((f: (typeof facturas)[number]) => ({
+        tipo: "FACTURA" as const,
+        fecha: f.fechaEmision,
+        comprobante: f.secuencial,
+        claveAcceso: f.claveAcceso,
+        identificacion: f.cliente.identificacion,
+        tipoIdentificacion: codigoTipoIdentificacionATS(f.cliente.tipoIdentificacion),
+        razonSocial: f.cliente.razonSocial,
+        base0: f.subtotal0.toFixed(2),
+        base12: f.subtotal12.toFixed(2),
+        iva: f.iva.toFixed(2),
+        total: f.total.toFixed(2),
+      })),
+      ...notasVentaConIva.map((n: (typeof notasVentaConIva)[number]) => ({
+        tipo: "NOTA_VENTA" as const,
+        fecha: n.fechaEmision,
+        comprobante: n.secuencial,
+        claveAcceso: null as string | null,
+        identificacion: n.cliente.identificacion,
+        tipoIdentificacion: codigoTipoIdentificacionATS(n.cliente.tipoIdentificacion),
+        razonSocial: n.cliente.razonSocial,
+        base0: n.subtotal0.toFixed(2),
+        base12: n.subtotal12.toFixed(2),
+        iva: n.iva.toFixed(2),
+        total: n.total.toFixed(2),
+      })),
+    ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+
+    const notasCreditoDetalle = notasCredito.map((nc: (typeof notasCredito)[number]) => ({
+      fecha: nc.fechaEmision,
+      comprobante: nc.secuencial,
+      claveAcceso: nc.claveAcceso,
+      facturaModificada: nc.factura.secuencial,
+      identificacion: nc.factura.cliente.identificacion,
+      tipoIdentificacion: codigoTipoIdentificacionATS(nc.factura.cliente.tipoIdentificacion),
+      razonSocial: nc.factura.cliente.razonSocial,
+      base0: nc.subtotal0.toFixed(2),
+      base12: nc.subtotal12.toFixed(2),
+      iva: nc.iva.toFixed(2),
+      total: nc.total.toFixed(2),
+    }));
+
+    const compras = comprasList.map((c: (typeof comprasList)[number]) => ({
+      fecha: c.fechaEmision,
+      comprobante: c.numeroFactura,
+      identificacion: c.proveedor.identificacion,
+      tipoIdentificacion: codigoTipoIdentificacionATS(c.proveedor.tipoIdentificacion),
+      razonSocial: c.proveedor.razonSocial,
+      base0: c.subtotal0.toFixed(2),
+      base12: c.subtotal12.toFixed(2),
+      iva: c.iva.toFixed(2),
+      total: c.total.toFixed(2),
+      sustentoTributario: c.sustentoTributario,
+    }));
+
+    const retencionesEmitidas = retenciones.map((r: (typeof retenciones)[number]) => ({
+      fecha: r.fechaEmision,
+      comprobante: r.secuencial,
+      claveAcceso: r.claveAcceso,
+      compraNumeroFactura: r.compra.numeroFactura,
+      identificacion: r.compra.proveedor.identificacion,
+      tipoIdentificacion: codigoTipoIdentificacionATS(r.compra.proveedor.tipoIdentificacion),
+      razonSocial: r.compra.proveedor.razonSocial,
+      totalIva: r.totalIva.toFixed(2),
+      totalRenta: r.totalRenta.toFixed(2),
+      total: r.total.toFixed(2),
+      detalles: r.detalles.map((d: (typeof r.detalles)[number]) => ({
+        tipoImpuesto: d.tipoImpuesto,
+        codigoRetencion: d.codigoRetencion,
+        baseImponible: d.baseImponible.toFixed(2),
+        porcentaje: d.porcentaje.toFixed(2),
+        valorRetenido: d.valorRetenido.toFixed(2),
+      })),
+    }));
+
+    const retencionesRecibidasDetalle = retencionesRecibidas.map((r: (typeof retencionesRecibidas)[number]) => ({
+      fecha: r.fechaEmision,
+      comprobante: r.numeroComprobante,
+      facturaSecuencial: r.factura.secuencial,
+      identificacion: r.factura.cliente.identificacion,
+      tipoIdentificacion: codigoTipoIdentificacionATS(r.factura.cliente.tipoIdentificacion),
+      razonSocial: r.factura.cliente.razonSocial,
+      totalIva: r.totalIva.toFixed(2),
+      totalRenta: r.totalRenta.toFixed(2),
+      total: r.total.toFixed(2),
+      detalles: r.detalles.map((d: (typeof r.detalles)[number]) => ({
+        tipoImpuesto: d.tipoImpuesto,
+        codigoRetencion: d.codigoRetencion,
+        baseImponible: d.baseImponible.toFixed(2),
+        porcentaje: d.porcentaje.toFixed(2),
+        valorRetenido: d.valorRetenido.toFixed(2),
+      })),
+    }));
+
+    // El SRI exige reportar también los comprobantes ANULADOS del período
+    // (para que el consecutivo no quede "sin explicación") — nunca se
+    // mezclan con ventas/notasCredito de arriba, van aparte.
+    const anulados = [
+      ...facturasAnuladas.map((f: (typeof facturasAnuladas)[number]) => ({
+        tipo: "FACTURA" as const,
+        comprobante: f.secuencial,
+        fecha: f.fechaEmision,
+        claveAcceso: f.claveAcceso,
+      })),
+      ...notasCreditoAnuladas.map((n: (typeof notasCreditoAnuladas)[number]) => ({
+        tipo: "NOTA_CREDITO" as const,
+        comprobante: n.secuencial,
+        fecha: n.fechaEmision,
+        claveAcceso: n.claveAcceso,
+      })),
+    ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+
+    res.json({
+      periodo: { anio, mes },
+      resumen: {
+        cantidadVentas: ventas.length,
+        cantidadNotasCredito: notasCreditoDetalle.length,
+        cantidadCompras: compras.length,
+        cantidadRetencionesEmitidas: retencionesEmitidas.length,
+        cantidadRetencionesRecibidas: retencionesRecibidasDetalle.length,
+        cantidadAnulados: anulados.length,
+        totalVentas: ventas.reduce((acc, v) => acc.add(v.total), new Prisma.Decimal(0)).toFixed(2),
+        totalCompras: compras.reduce((acc, c) => acc.add(c.total), new Prisma.Decimal(0)).toFixed(2),
+        totalRetencionesEmitidas: retencionesEmitidas.reduce((acc, r) => acc.add(r.total), new Prisma.Decimal(0)).toFixed(2),
+        totalRetencionesRecibidas: retencionesRecibidasDetalle.reduce((acc, r) => acc.add(r.total), new Prisma.Decimal(0)).toFixed(2),
+      },
+      ventas,
+      notasCredito: notasCreditoDetalle,
+      compras,
+      retencionesEmitidas,
+      retencionesRecibidas: retencionesRecibidasDetalle,
+      anulados,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al generar el reporte ATS" });
   }
 });
 

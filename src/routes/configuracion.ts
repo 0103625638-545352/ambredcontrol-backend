@@ -24,6 +24,7 @@ import { rutaAbsoluta, actualizarEmpresa, actualizarCertificadoEmpresa, cicloCor
 import { registrarAuditoria } from "../utils/auditoria";
 import { invalidarCacheExpiracionCertificado } from "../utils/certificado";
 import { ejecutarBackupDeEmpresa, estadoBackup, backupAtrasado } from "../utils/backupBaseDatos";
+import { leerCodigosSri, guardarCodigosSri, type CodigosSri } from "../utils/codigosSri";
 
 export const configuracionRouter = Router();
 
@@ -278,6 +279,55 @@ configuracionRouter.put("/empresa", requirePermiso("configuracion"), (req: Reque
   });
 });
 
+// GET /configuracion/codigos-sri
+// A diferencia del resto de este archivo, NO es por empresa — los códigos
+// de las tablas oficiales del SRI (tipo de identificación, porcentaje de
+// IVA, forma de pago) son los mismos para cualquier negocio en Ecuador, por
+// eso viven en un solo archivo global (ver utils/codigosSri.ts) en vez de
+// en el registro de la empresa activa.
+configuracionRouter.get("/codigos-sri", (_req: Request, res: Response) => {
+  res.json(leerCodigosSri());
+});
+
+// PUT /configuracion/codigos-sri
+// Para cuando el SRI actualiza alguna de estas tablas (ver el aviso en la
+// pantalla ATS) — evita tener que editar código y volver a desplegar.
+configuracionRouter.put("/codigos-sri", requirePermiso("configuracion"), (req: Request, res: Response) => {
+  const { tipoIdentificacion, formaPago, porcentajeIva } = req.body as Partial<CodigosSri>;
+
+  if (!tipoIdentificacion || !formaPago || !porcentajeIva) {
+    return res.status(400).json({ error: "tipoIdentificacion, formaPago y porcentajeIva son obligatorios" });
+  }
+  const CLAVES_TIPO_IDENTIFICACION = ["RUC", "CEDULA", "PASAPORTE", "CONSUMIDOR_FINAL"];
+  const CLAVES_FORMA_PAGO = ["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "OTRO", "TARJETA_DEBITO", "TARJETA_CREDITO"];
+  for (const clave of CLAVES_TIPO_IDENTIFICACION) {
+    if (!tipoIdentificacion[clave]?.trim()) {
+      return res.status(400).json({ error: `Falta el código de tipoIdentificacion.${clave}` });
+    }
+  }
+  for (const clave of CLAVES_FORMA_PAGO) {
+    if (!formaPago[clave]?.trim()) {
+      return res.status(400).json({ error: `Falta el código de formaPago.${clave}` });
+    }
+  }
+  const porcentajes = Object.entries(porcentajeIva);
+  if (porcentajes.length === 0 || porcentajes.some(([, codigo]) => !codigo?.trim())) {
+    return res.status(400).json({ error: "Cada porcentaje de IVA necesita un código" });
+  }
+
+  const codigos: CodigosSri = { tipoIdentificacion, formaPago, porcentajeIva };
+  guardarCodigosSri(codigos);
+
+  registrarAuditoria(prisma, {
+    usuarioId: req.usuario!.usuarioId,
+    accion: "EDITAR_CODIGOS_SRI",
+    entidad: "CodigosSri",
+    detalle: "Códigos de tipo de identificación / forma de pago / porcentaje de IVA actualizados",
+  }).catch((error) => console.error("No se pudo registrar la auditoría de EDITAR_CODIGOS_SRI:", error));
+
+  res.json(codigos);
+});
+
 const subirCertificado = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
@@ -323,4 +373,86 @@ configuracionRouter.post("/certificado", requirePermiso("configuracion"), subirC
   actualizarCertificadoEmpresa(empresaActivaId(), password);
   invalidarCacheExpiracionCertificado(empresaActivaId());
   res.json({ mensaje: "Certificado actualizado" });
+});
+
+// Tipos de comprobante cuya numeración puede sembrarse antes de emitir el
+// primero en este sistema — ver GET/PUT /configuracion/secuenciales abajo.
+// "PRO" (proformas) y "DC" (devoluciones a proveedor) quedan fuera a
+// propósito: no son comprobantes con numeración legal que un negocio
+// necesite "continuar" al migrarse a este sistema.
+const TIPOS_SECUENCIAL_EDITABLES: { codigo: string; etiqueta: string; contar: () => Promise<number> }[] = [
+  { codigo: "01", etiqueta: "Facturas", contar: () => prisma.factura.count() },
+  { codigo: "04", etiqueta: "Notas de crédito", contar: () => prisma.notaCredito.count() },
+  { codigo: "06", etiqueta: "Guías de remisión", contar: () => prisma.guiaRemision.count() },
+  { codigo: "07", etiqueta: "Comprobantes de retención", contar: () => prisma.retencion.count() },
+  { codigo: "NV", etiqueta: "Notas de venta", contar: () => prisma.notaVenta.count() },
+];
+
+// GET /configuracion/secuenciales
+// Para la pantalla de "numeración inicial" en Ajustes: por cada tipo de
+// comprobante, el último número usado hasta ahora en este sistema y si ya
+// hay documentos emitidos (si los hay, el número deja de ser editable — ver
+// el PUT de abajo).
+configuracionRouter.get("/secuenciales", requirePermiso("configuracion"), async (_req: Request, res: Response) => {
+  const resultado = await Promise.all(
+    TIPOS_SECUENCIAL_EDITABLES.map(async ({ codigo, etiqueta, contar }) => {
+      const [fila, totalDocumentos] = await Promise.all([
+        prisma.secuencial.findUnique({
+          where: { puntoVenta_establecimiento_tipoComprobante: { puntoVenta: "001", establecimiento: "001", tipoComprobante: codigo } },
+        }),
+        contar(),
+      ]);
+      return {
+        tipoComprobante: codigo,
+        etiqueta,
+        ultimoNumero: fila?.ultimoNumero ?? 0,
+        totalDocumentos,
+        editable: totalDocumentos === 0,
+      };
+    })
+  );
+  res.json(resultado);
+});
+
+// PUT /configuracion/secuenciales/:tipoComprobante
+// Siembra el "último número ya emitido" (fuera de este sistema, ej. en el
+// sistema anterior o en facturación física) ANTES de emitir el primer
+// comprobante de ese tipo acá — así el próximo que se cree en este sistema
+// continúa la numeración que el SRI ya tiene autorizada, en vez de arrancar
+// otra vez desde 1. Bloqueado en cuanto exista un solo documento de ese tipo
+// en este sistema: cambiar el contador después abre la puerta a repetir un
+// número de secuencial ya usado, lo que el SRI rechaza.
+configuracionRouter.put("/secuenciales/:tipoComprobante", requirePermiso("configuracion"), async (req: Request, res: Response) => {
+  const tipoComprobante = String(req.params.tipoComprobante);
+  const tipo = TIPOS_SECUENCIAL_EDITABLES.find((t) => t.codigo === tipoComprobante);
+  if (!tipo) {
+    return res.status(400).json({ error: "Tipo de comprobante no reconocido" });
+  }
+
+  const ultimoNumero = Number(req.body.ultimoNumero);
+  if (!Number.isInteger(ultimoNumero) || ultimoNumero < 0) {
+    return res.status(400).json({ error: "ultimoNumero debe ser un entero mayor o igual a 0" });
+  }
+
+  const totalDocumentos = await tipo.contar();
+  if (totalDocumentos > 0) {
+    return res.status(409).json({
+      error: `Ya existen ${totalDocumentos} comprobante(s) de "${tipo.etiqueta}" emitidos en este sistema — la numeración inicial ya no se puede cambiar.`,
+    });
+  }
+
+  const fila = await prisma.secuencial.upsert({
+    where: { puntoVenta_establecimiento_tipoComprobante: { puntoVenta: "001", establecimiento: "001", tipoComprobante } },
+    create: { puntoVenta: "001", establecimiento: "001", tipoComprobante, ultimoNumero },
+    update: { ultimoNumero },
+  });
+
+  await registrarAuditoria(prisma, {
+    usuarioId: req.usuario!.usuarioId,
+    accion: "EDITAR_SECUENCIAL_INICIAL",
+    entidad: "Secuencial",
+    detalle: `${tipo.etiqueta}: numeración inicial sembrada en ${ultimoNumero} — el próximo comprobante será el Nº ${ultimoNumero + 1}`,
+  });
+
+  res.json({ tipoComprobante, etiqueta: tipo.etiqueta, ultimoNumero: fila.ultimoNumero });
 });

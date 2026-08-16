@@ -1,0 +1,21 @@
+{
+  "tipoIdentificacion": {
+    "RUC": "04",
+    "CEDULA": "05",
+    "PASAPORTE": "06",
+    "CONSUMIDOR_FINAL": "07"
+  },
+  "formaPago": {
+    "EFECTIVO": "01",
+    "TRANSFERENCIA": "20",
+    "CHEQUE": "20",
+    "OTRO": "20",
+    "TARJETA_DEBITO": "16",
+    "TARJETA_CREDITO": "19"
+  },
+  "porcentajeIva": {
+    "0": "0",
+    "12": "2",
+    "15": "4"
+  }
+}

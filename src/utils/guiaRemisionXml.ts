@@ -7,16 +7,37 @@
 // traslado) y un único "destinatario" (ver decisión de alcance: un solo
 // destinatario por guía) con su lista de bienes transportados.
 //
-// IMPORTANTE — igual criterio que retencionXml.ts: los nombres exactos de
-// tags y la versión del esquema están marcados con "VERIFICAR" donde no se
-// pudo confirmar al 100% contra la Ficha Técnica oficial (el PDF vigente del
-// SRI es un escaneo, no tiene texto extraíble). La estructura base sí se
-// confirmó contra una implementación real en producción. Si algo queda mal
-// acá, el SRI simplemente rechaza el comprobante en Recepción (visible, no
-// un fallo silencioso) — mismo comportamiento que ya maneja el resto del
-// pipeline.
-
+// Estructura revisada dos veces:
+//   1) Contra una plantilla de referencia con comentarios explicativos (no
+//      un comprobante real autorizado por el SRI) — reveló que faltaba el
+//      bloque de "documento de sustento" (la Factura que la guía
+//      transporta) dentro de cada destinatario:
+//      codDocSustento/numDocSustento/numAutDocSustento/fechaEmisionDocSustento.
+//   2) Contra los XML de ejemplo OFICIALES que genera el propio esquema
+//      XSD del SRI (uno por versión: 1.0.0 y 1.1.0 — se nota por
+//      xsi:noNamespaceSchemaLocation apuntando al .xsd correspondiente).
+//      Esta fuente es más confiable que una plantilla suelta porque sale
+//      directo del esquema, aunque tampoco es un comprobante real
+//      autorizado (los valores son placeholders tipo "razonSocial0"), así
+//      que no confirma cardinalidad (qué es opcional vs obligatorio), solo
+//      nombres y orden de los tags. Confirmó dos cosas:
+//        a) Los tags de fecha en el XML real del esquema son
+//           "fechaIniTransporte"/"fechaFinTransporte", NO
+//           "fechaIniTraslado"/"fechaFinTraslado" como se había puesto en
+//           la revisión (1) — esa renombrada estaba mal, se revierte acá.
+//        b) Cada <detalle> trae un contenedor <detallesAdicionales>,
+//           vacío si no hay campos adicionales que declarar.
+//      Ambos ejemplos oficiales también muestran <rise>, <contribuyenteEspecial>,
+//      <docAduaneroUnico>, <codEstabDestino>, <codigoAdicional> y un bloque
+//      <maquinaFiscal> — se dejan fuera a propósito: son opcionales y
+//      atados a escenarios que este negocio no usa (aduana/exportación,
+//      traslado entre establecimientos, régimen RISE, contribuyente
+//      especial, impresora fiscal), y omitir un elemento opcional es
+//      válido contra el XSD. Si alguna vez aparece una guía real ya
+//      autorizada por el SRI para comparar, vale la pena revisar esto con
+//      la misma confianza que se logró con retencionXml.ts.
 import { create } from "xmlbuilder2";
+import { codigoTipoIdentificacion } from "./codigosSri";
 
 interface DetalleParaXml {
   producto: { codigo: string };
@@ -42,6 +63,9 @@ interface GuiaRemisionParaXml {
   fechaIniTransporte: Date;
   fechaFinTransporte: Date;
   detalles: DetalleParaXml[];
+  // La Factura que esta guía transporta — el "documento de sustento" que
+  // exige el SRI dentro de cada destinatario (ver el comentario de arriba).
+  factura: { secuencial: string; fechaEmision: Date; claveAcceso: string | null };
 }
 
 interface DatosEmisor {
@@ -54,14 +78,6 @@ interface DatosEmisor {
   obligadoContabilidad: boolean;
 }
 
-// Mismo mapeo que facturaXml.ts/notaCreditoXml.ts/retencionXml.ts — se
-// duplica a propósito (convención ya establecida: cada *Xml.ts es
-// autocontenido).
-function codigoTipoIdentificacion(tipo: string): string {
-  const mapa: Record<string, string> = { RUC: "04", CEDULA: "05", PASAPORTE: "06", CONSUMIDOR_FINAL: "07" };
-  return mapa[tipo] ?? "05";
-}
-
 function formatearFechaSri(fecha: Date): string {
   const dd = String(fecha.getDate()).padStart(2, "0");
   const mm = String(fecha.getMonth() + 1).padStart(2, "0");
@@ -69,10 +85,6 @@ function formatearFechaSri(fecha: Date): string {
   return `${dd}/${mm}/${aaaa}`;
 }
 
-// VERIFICAR: catálogo oficial del SRI para "motivoTraslado" — este es un
-// subconjunto corto y estable (a diferencia de codigoRetencion, no cambia
-// periódicamente), pero confirmar la redacción exacta esperada contra la
-// Ficha Técnica vigente antes del primer envío real.
 const TEXTO_MOTIVO_TRASLADO: Record<string, string> = {
   VENTA: "VENTA",
   TRANSFERENCIA_ESTABLECIMIENTOS: "TRANSFERENCIA ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA",
@@ -91,8 +103,7 @@ export function generarXmlGuiaRemision(guia: GuiaRemisionParaXml, emisor: DatosE
   const [estab, ptoEmi, secuencialNum] = guia.secuencial.split("-");
 
   let doc = create({ version: "1.0", encoding: "UTF-8" })
-    // VERIFICAR: versión de esquema vigente ("1.0.0" vs "1.1.0").
-    .ele("guiaRemision", { id: "comprobante", version: "1.1.0" })
+    .ele("guiaRemision", { id: "comprobante", version: "1.0.0" })
     .ele("infoTributaria")
       .ele("ambiente").txt(emisor.ambiente).up()
       .ele("tipoEmision").txt("1").up()
@@ -112,9 +123,8 @@ export function generarXmlGuiaRemision(guia: GuiaRemisionParaXml, emisor: DatosE
       .ele("dirPartida").txt(guia.dirPartida).up()
       .ele("razonSocialTransportista").txt(guia.transportistaRazonSocial).up()
       .ele("tipoIdentificacionTransportista").txt(codigoTipoIdentificacion(guia.transportistaTipoIdentificacion)).up()
-      // VERIFICAR: el tag oficial se llama "rucTransportista" incluso cuando
-      // la identificación es cédula/pasaporte (confirmado contra una
-      // implementación real en producción).
+      // El tag oficial se llama "rucTransportista" incluso cuando la
+      // identificación es cédula/pasaporte.
       .ele("rucTransportista").txt(guia.transportistaIdentificacion).up()
       .ele("obligadoContabilidad").txt(emisor.obligadoContabilidad ? "SI" : "NO").up()
       .ele("fechaIniTransporte").txt(formatearFechaSri(guia.fechaIniTransporte)).up()
@@ -133,6 +143,14 @@ export function generarXmlGuiaRemision(guia: GuiaRemisionParaXml, emisor: DatosE
     doc = doc.ele("ruta").txt(guia.ruta).up();
   }
 
+  doc = doc
+        // Documento de sustento: la Factura que esta guía transporta — sin
+        // esto, el SRI no puede vincular el traslado a ninguna venta.
+        .ele("codDocSustento").txt("01").up() // 01 = factura
+        .ele("numDocSustento").txt(guia.factura.secuencial).up()
+        .ele("numAutDocSustento").txt(guia.factura.claveAcceso ?? "").up()
+        .ele("fechaEmisionDocSustento").txt(formatearFechaSri(guia.factura.fechaEmision)).up();
+
   doc = doc.ele("detalles");
 
   for (const linea of guia.detalles) {
@@ -140,7 +158,10 @@ export function generarXmlGuiaRemision(guia: GuiaRemisionParaXml, emisor: DatosE
       .ele("detalle")
         .ele("codigoInterno").txt(linea.producto.codigo).up()
         .ele("descripcion").txt(linea.descripcion).up()
-        .ele("cantidad").txt(String(linea.cantidad)).up()
+        .ele("cantidad").txt(linea.cantidad.toFixed(2)).up()
+        // Presente (vacío) en los dos ejemplos oficiales del XSD del SRI —
+        // ver comentario de cabecera. Sin campos adicionales que declarar.
+        .ele("detallesAdicionales").up()
       .up();
   }
 

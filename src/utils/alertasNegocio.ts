@@ -8,6 +8,7 @@
 // la ruta del certificado como parámetro explícito.
 
 import { prisma, empresaActiva } from "../db";
+import { Prisma } from "@prisma/client";
 import { leerFechaExpiracionCertificado } from "./certificado";
 import { rutaAbsoluta } from "./empresas";
 import { estadoBackup, backupAtrasado, type EstadoBackupEmpresa } from "./backupBaseDatos";
@@ -128,6 +129,62 @@ export async function obtenerCuentasPorCobrarPendientes(): Promise<CuentaPorCobr
 // que un documento nunca se avise.
 export async function obtenerCuentasProximasAVencer(diasAntes: number): Promise<CuentaPorCobrar[]> {
   const pendientes = await obtenerCuentasPorCobrarPendientes();
+  return pendientes.filter((c) => {
+    const dias = calcularDiasParaVencer(c.fechaVencimiento, new Date());
+    return dias !== null && dias <= diasAntes;
+  });
+}
+
+export interface CuentaPorPagar {
+  id: number;
+  numeroFactura: string;
+  proveedorNombre: string;
+  total: string;
+  montoPagado: string;
+  saldo: string;
+  fechaVencimiento: Date | null;
+}
+
+// El reverso de obtenerCuentasPorCobrarPendientes: compras a proveedores que
+// todavía no hemos terminado de pagar. DevolucionCompra nunca edita
+// compra.total/montoPagado (ver utils/devolucionesCompra.ts), así que el
+// saldo real descuenta lo ya devuelto — una sola consulta agregada para
+// todas las compras, en vez de una por fila.
+export async function obtenerCuentasPorPagarPendientes(): Promise<CuentaPorPagar[]> {
+  const compras = await prisma.compra.findMany({
+    where: { estado: { not: "ANULADA" }, estadoPago: { in: ["PENDIENTE", "PARCIAL"] } },
+    include: { proveedor: { select: { razonSocial: true } } },
+    orderBy: { fechaEmision: "asc" },
+  });
+
+  const devolucionesPorCompra = await prisma.devolucionCompra.groupBy({
+    by: ["compraId"],
+    _sum: { total: true },
+    where: { compraId: { in: compras.map((c: (typeof compras)[number]) => c.id) } },
+  });
+  const totalDevueltoPorCompraId = new Map(
+    devolucionesPorCompra.map((d: (typeof devolucionesPorCompra)[number]) => [d.compraId, d._sum.total ?? new Prisma.Decimal(0)])
+  );
+
+  return compras.map((c: (typeof compras)[number]) => {
+    const saldo = c.total.sub(c.montoPagado).sub(totalDevueltoPorCompraId.get(c.id) ?? new Prisma.Decimal(0));
+    return {
+      id: c.id,
+      numeroFactura: c.numeroFactura,
+      proveedorNombre: c.proveedor.razonSocial,
+      total: c.total.toFixed(2),
+      montoPagado: c.montoPagado.toFixed(2),
+      saldo: saldo.toFixed(2),
+      fechaVencimiento: c.fechaVencimiento,
+    };
+  });
+}
+
+// Subconjunto de obtenerCuentasPorPagarPendientes a N días o menos de
+// vencer — mismo criterio que obtenerCuentasProximasAVencer, para el aviso
+// de vencimientos próximos (ver jobs/alertaVencimientosProximos.ts).
+export async function obtenerCuentasPorPagarProximasAVencer(diasAntes: number): Promise<CuentaPorPagar[]> {
+  const pendientes = await obtenerCuentasPorPagarPendientes();
   return pendientes.filter((c) => {
     const dias = calcularDiasParaVencer(c.fechaVencimiento, new Date());
     return dias !== null && dias <= diasAntes;

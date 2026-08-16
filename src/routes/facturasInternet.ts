@@ -358,7 +358,28 @@ facturasInternetRouter.post(
         const formaPago = req.body.formaPago;
         const referencia = req.body.referencia || undefined;
         const cuentaBancariaId = req.body.cuentaBancariaId ? Number(req.body.cuentaBancariaId) : undefined;
-        const datosPago = { monto, formaPago, referencia, cuentaBancariaId };
+        const bancoOrigenId = req.body.bancoOrigenId ? Number(req.body.bancoOrigenId) : undefined;
+        const numeroCuentaOrigen = req.body.numeroCuentaOrigen || undefined;
+        const tarjetaUltimosDigitos = req.body.tarjetaUltimosDigitos || undefined;
+        const tarjetaTipo = req.body.tarjetaTipo || undefined;
+        const tarjetaReferencia = req.body.tarjetaReferencia || undefined;
+        const tarjetaLote = req.body.tarjetaLote || undefined;
+        const chequeNumero = req.body.chequeNumero || undefined;
+        const chequeFechaCobro = req.body.chequeFechaCobro || undefined;
+        const datosPago = {
+          monto,
+          formaPago,
+          referencia,
+          cuentaBancariaId,
+          bancoOrigenId,
+          numeroCuentaOrigen,
+          tarjetaUltimosDigitos,
+          tarjetaTipo,
+          tarjetaReferencia,
+          tarjetaLote,
+          chequeNumero,
+          chequeFechaCobro,
+        };
 
         const resultado = facturaPendiente
           ? await registrarPagoDeFactura(facturaPendiente.id, datosPago, req.usuario!.usuarioId)

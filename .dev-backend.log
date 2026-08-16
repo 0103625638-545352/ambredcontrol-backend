@@ -12,373 +12,231 @@ Servidor corriendo en http://localhost:3000
 [resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
 [backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
 [alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
 [32m[nodemon] restarting due to changes...[39m
 [32m[nodemon] starting `ts-node src/index.ts`[39m
 [32m[nodemon] restarting due to changes...[39m
 [32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859
+G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:859
     return new TSError(diagnosticText, diagnosticCodes, diagnostics);
            ^
 TSError: ⨯ Unable to compile TypeScript:
-src/index.ts(35,1): error TS6133: 'empleadosRouter' is declared but its value is never read.
-src/index.ts(36,1): error TS6133: 'rolDePagosRouter' is declared but its value is never read.
-src/index.ts(37,1): error TS6133: 'decimosRouter' is declared but its value is never read.
-src/index.ts(38,1): error TS6133: 'vacacionesRouter' is declared but its value is never read.
-src/index.ts(39,1): error TS6133: 'utilidadesRouter' is declared but its value is never read.
-src/index.ts(40,1): error TS6133: 'liquidacionesRouter' is declared but its value is never read.
+src/utils/facturaXml.ts(12,10): error TS2440: Import declaration conflicts with local declaration of 'codigoTipoIdentificacion'.
+src/utils/facturaXml.ts(12,36): error TS2440: Import declaration conflicts with local declaration of 'codigoPorcentajeIva'.
+src/utils/facturaXml.ts(12,57): error TS2440: Import declaration conflicts with local declaration of 'codigoFormaPagoSri'.
 
-    at createTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859:12)
-    at reportTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:863:19)
-    at getOutput (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1077:36)
-    at Object.compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1433:41)
-    at Module.m._compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at createTSError (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1617:30)
     at node:internal/modules/cjs/loader:2002:10
-    at Object.require.extensions.<computed> [as .ts] (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Object.require.extensions.<computed> [as .ts] (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1621:12)
     at Module.load (node:internal/modules/cjs/loader:1594:32)
     at Module._load (node:internal/modules/cjs/loader:1396:12)
     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
-  diagnosticCodes: [ 6133, 6133, 6133, 6133, 6133, 6133 ]
+  diagnosticCodes: [ 2440, 2440, 2440 ]
+}
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[resumen-diario] Armando y enviando el resumen diario de todas las empresas...
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+Servidor corriendo en http://localhost:3000
+[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
+[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
+[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
+[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/routes/configuracion.ts(445,103): error TS2322: Type 'string | string[]' is not assignable to type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+src/routes/configuracion.ts(446,58): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at node:internal/modules/cjs/loader:2002:10
+    at Object.require.extensions.<computed> [as .ts] (G:\SISTEMAS CODE\AmbRedControl\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
+  diagnosticCodes: [ 2322, 2322 ]
 }
 [31m[nodemon] app crashed - waiting for file changes before starting...[39m
 [32m[nodemon] restarting due to changes...[39m
@@ -388,442 +246,15 @@ Servidor corriendo en http://localhost:3000
 [resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
 [backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
 [alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-(node:7844) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-PrismaClientValidationError: 
-Invalid `prisma.cuentaContable.findMany()` invocation in
-C:\Proyectos\facturacion-app\backend\src\routes\contabilidad.ts:473:49
-
-  470 
-  471 try {
-  472   const cuentaIds = [...new Set(lineas.map((l) => l.cuentaId))];
-→ 473   const cuentas = await prisma.cuentaContable.findMany({
-          where: {
-            id: {
-              in: [
-                undefined
-                ~~~~~~~~~
-              ]
-            }
-          }
-        })
-
-Invalid value for argument `in[0]`: Can not use `undefined` value within array. Use `null` or filter out `undefined` values.
-    at throwValidationException (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\errorRendering\throwValidationException.ts:45:9)
-    at e.throwValidationError (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:450:5)
-    at serializeArgumentsArray (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:388:15)
-    at serializeArgumentsValue (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:307:12)
-    at serializeArgumentsObject (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:367:21)
-    at serializeArgumentsValue (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:335:12)
-    at serializeArgumentsObject (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:367:21)
-    at serializeArgumentsValue (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:335:12)
-    at serializeArgumentsObject (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:367:21)
-    at Et (C:\Proyectos\facturacion-app\backend\node_modules\@prisma\client\src\runtime\core\jsonProtocol\serializeJsonQuery.ts:124:16) {
-  clientVersion: '6.19.3'
-}
-Error: WinAnsi cannot encode "⚠" (0x26a0)
-    at Encoding.encodeUnicodeCodePoint (C:\Proyectos\facturacion-app\backend\node_modules\@pdf-lib\standard-fonts\lib\Encoding.js:23:23)
-    at StandardFontEmbedder.encodeTextAsGlyphs (C:\Proyectos\facturacion-app\backend\node_modules\pdf-lib\src\core\embedders\StandardFontEmbedder.ts:124:35)
-    at StandardFontEmbedder.encodeText (C:\Proyectos\facturacion-app\backend\node_modules\pdf-lib\src\core\embedders\StandardFontEmbedder.ts:50:25)
-    at PDFFont.encodeText (C:\Proyectos\facturacion-app\backend\node_modules\pdf-lib\src\api\PDFFont.ts:72:26)
-    at PDFPage.drawText (C:\Proyectos\facturacion-app\backend\node_modules\pdf-lib\src\api\PDFPage.ts:993:35)
-    at escribir (C:\Proyectos\facturacion-app\backend\src\utils\generarActaFiniquitoPdf.ts:66:10)
-    at generarActaFiniquitoPdf (C:\Proyectos\facturacion-app\backend\src\utils\generarActaFiniquitoPdf.ts:107:3)
-    at async C:\Proyectos\facturacion-app\backend\src\routes\liquidaciones.ts:160:22
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-SyntaxError: Bad control character in string literal in JSON at position 89 (line 2 column 88)
-    at JSON.parse (<anonymous>)
-    at parse (C:\Proyectos\facturacion-app\backend\node_modules\body-parser\lib\types\json.js:91:21)
-    at C:\Proyectos\facturacion-app\backend\node_modules\body-parser\lib\read.js:162:18
-    at AsyncResource.runInAsyncScope (node:async_hooks:227:14)
-    at invokeCallback (C:\Proyectos\facturacion-app\backend\node_modules\raw-body\index.js:238:16)
-    at done (C:\Proyectos\facturacion-app\backend\node_modules\raw-body\index.js:227:7)
-    at IncomingMessage.onEnd (C:\Proyectos\facturacion-app\backend\node_modules\raw-body\index.js:287:7)
-    at IncomingMessage.emit (node:events:509:28)
-    at IncomingMessage.emit (node:domain:489:12)
-    at endReadableNT (node:internal/streams/readable:1729:12)
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-(node:7796) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugnomina\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugnomina\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugacercade\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugacercade\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859
-    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
-           ^
-TSError: ⨯ Unable to compile TypeScript:
-src/routes/dashboard.ts(8,1): error TS6133: 'aClaveDia' is declared but its value is never read.
-
-    at createTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859:12)
-    at reportTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:863:19)
-    at getOutput (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1077:36)
-    at Object.compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1433:41)
-    at Module.m._compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1617:30)
-    at node:internal/modules/cjs/loader:2002:10
-    at Object.require.extensions.<computed> [as .ts] (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1621:12)
-    at Module.load (node:internal/modules/cjs/loader:1594:32)
-    at Module._load (node:internal/modules/cjs/loader:1396:12)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
-  diagnosticCodes: [ 6133 ]
-}
-[31m[nodemon] app crashed - waiting for file changes before starting...[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859
-    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
-           ^
-TSError: ⨯ Unable to compile TypeScript:
-src/routes/dashboard.ts(8,1): error TS6133: 'aClaveDia' is declared but its value is never read.
-src/routes/dashboard.ts(23,7): error TS6133: 'TOP_PRODUCTOS_DASHBOARD' is declared but its value is never read.
-src/routes/dashboard.ts(31,11): error TS6133: 'desdeTendencia' is declared but its value is never read.
-src/routes/dashboard.ts(43,7): error TS2493: Tuple type '[{ id: number; createdAt: Date; sucursalId: number; bodegaId: number; total: Decimal; fechaEmision: Date; puntoVentaId: number | null; subtotal0: Decimal; ... 8 more ...; clienteId: number; }[], ... 7 more ..., (PickEnumerable<...> & { ...; })[]]' of length '9' has no element at index '9'.
-src/routes/dashboard.ts(43,7): error TS6133: 'facturasTendencia' is declared but its value is never read.
-src/routes/dashboard.ts(44,7): error TS2493: Tuple type '[{ id: number; createdAt: Date; sucursalId: number; bodegaId: number; total: Decimal; fechaEmision: Date; puntoVentaId: number | null; subtotal0: Decimal; ... 8 more ...; clienteId: number; }[], ... 7 more ..., (PickEnumerable<...> & { ...; })[]]' of length '9' has no element at index '10'.
-src/routes/dashboard.ts(44,7): error TS6133: 'notasVentaTendencia' is declared but its value is never read.
-src/routes/dashboard.ts(45,7): error TS2493: Tuple type '[{ id: number; createdAt: Date; sucursalId: number; bodegaId: number; total: Decimal; fechaEmision: Date; puntoVentaId: number | null; subtotal0: Decimal; ... 8 more ...; clienteId: number; }[], ... 7 more ..., (PickEnumerable<...> & { ...; })[]]' of length '9' has no element at index '11'.
-src/routes/dashboard.ts(45,7): error TS6133: 'detallesFacturaMes' is declared but its value is never read.
-src/routes/dashboard.ts(46,7): error TS2493: Tuple type '[{ id: number; createdAt: Date; sucursalId: number; bodegaId: number; total: Decimal; fechaEmision: Date; puntoVentaId: number | null; subtotal0: Decimal; ... 8 more ...; clienteId: number; }[], ... 7 more ..., (PickEnumerable<...> & { ...; })[]]' of length '9' has no element at index '12'.
-src/routes/dashboard.ts(46,7): error TS6133: 'detallesNotaVentaMes' is declared but its value is never read.
-
-    at createTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859:12)
-    at reportTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:863:19)
-    at getOutput (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1077:36)
-    at Object.compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1433:41)
-    at Module.m._compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1617:30)
-    at node:internal/modules/cjs/loader:2002:10
-    at Object.require.extensions.<computed> [as .ts] (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1621:12)
-    at Module.load (node:internal/modules/cjs/loader:1594:32)
-    at Module._load (node:internal/modules/cjs/loader:1396:12)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
-  diagnosticCodes: [
-    6133, 6133, 6133,
-    2493, 6133, 2493,
-    6133, 2493, 6133,
-    2493, 6133
-  ]
-}
-[31m[nodemon] app crashed - waiting for file changes before starting...[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859
-    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
-           ^
-TSError: ⨯ Unable to compile TypeScript:
-src/routes/dashboard.ts(8,1): error TS6133: 'aClaveDia' is declared but its value is never read.
-src/routes/dashboard.ts(23,7): error TS6133: 'TOP_PRODUCTOS_DASHBOARD' is declared but its value is never read.
-src/routes/dashboard.ts(43,7): error TS6133: 'facturasTendencia' is declared but its value is never read.
-src/routes/dashboard.ts(44,7): error TS6133: 'notasVentaTendencia' is declared but its value is never read.
-src/routes/dashboard.ts(45,7): error TS6133: 'detallesFacturaMes' is declared but its value is never read.
-src/routes/dashboard.ts(46,7): error TS6133: 'detallesNotaVentaMes' is declared but its value is never read.
-
-    at createTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:859:12)
-    at reportTSError (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:863:19)
-    at getOutput (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1077:36)
-    at Object.compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1433:41)
-    at Module.m._compile (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1617:30)
-    at node:internal/modules/cjs/loader:2002:10
-    at Object.require.extensions.<computed> [as .ts] (C:\Proyectos\facturacion-app\backend\node_modules\ts-node\src\index.ts:1621:12)
-    at Module.load (node:internal/modules/cjs/loader:1594:32)
-    at Module._load (node:internal/modules/cjs/loader:1396:12)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
-  diagnosticCodes: [ 6133, 6133, 6133, 6133, 6133, 6133 ]
-}
-[31m[nodemon] app crashed - waiting for file changes before starting...[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[32m[nodemon] restarting due to changes...[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-Servidor corriendo en http://localhost:3000
-[reintento-sri] Job activado: reintenta autorizaciones pendientes cada 5 minuto(s).
-[resumen-diario] Job activado: revisa cada 15 minutos si toca enviar el resumen diario.
-[backup-db] Job activado: revisa cada 15 minutos si toca ejecutar el respaldo diario.
-[alerta-vencimientos] Job activado: revisa cada 15 minutos si toca enviar el aviso de vencimientos próximos.
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-(node:15392) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugdashboard\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\data\debugdashboard\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[alertas-negocio] No se pudo leer la fecha de expiración del certificado: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000015 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000016 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000004 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000005 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000006 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000003 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000007 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000008 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000010 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000014 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000017 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000018 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando factura 001-001-000000019 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
-[reintento-sri] Error reenviando nota de crédito 001-001-000000001 que seguía en CREADA: ENOENT: no such file or directory, open 'C:\Proyectos\facturacion-app\backend\certificado.p12'
+[alerta-sri-atascado] Job activado: revisa cada 15 minutos si hay comprobantes atascados más de 60 minuto(s) sin autorizar (máximo un aviso por día por empresa).
+[suspension-internet] Job activado: revisa pagos de internet cada 60 minuto(s) (día límite editable por empresa desde Ajustes).
+[suspension-internet] Juan Perez (demo): Timed out after 10 seconds
+[suspension-internet] Roberto Nieto (demo IP): Timed out after 10 seconds
+[suspension-internet] PABLO BARRETO: Timed out after 10 seconds
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: Timed out after 10 seconds
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: Timed out after 10 seconds
+[suspension-internet] Juan Perez (demo): No se pudo sincronizar con el Mikrotik
+[suspension-internet] Roberto Nieto (demo IP): No se pudo sincronizar con el Mikrotik
+[suspension-internet] PABLO BARRETO: No se pudo sincronizar con el Mikrotik
+[suspension-internet] MARIA JAQUELINE OTAVALO MARIN: No se pudo sincronizar con el Mikrotik
+[suspension-internet] JUAN CARLOS AMBROSI LUZURIAGA: No se pudo sincronizar con el Mikrotik

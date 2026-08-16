@@ -9,6 +9,7 @@
 
 import { create } from "xmlbuilder2";
 import { Prisma } from "@prisma/client";
+import { codigoTipoIdentificacion, codigoPorcentajeIva, codigoFormaPagoSri } from "./codigosSri";
 
 // Tipos mínimos que necesitamos del resultado de Prisma (factura con relaciones)
 interface DetalleParaXml {
@@ -35,6 +36,14 @@ interface FacturaParaXml {
     direccion?: string | null;
   };
   detalles: DetalleParaXml[];
+  // Forma de pago REAL de esta venta (valores internos: EFECTIVO,
+  // TRANSFERENCIA, TARJETA, CHEQUE, OTRO — ver Pago.formaPago en
+  // schema.prisma) y, si es TARJETA, si fue débito o crédito. Opcional:
+  // cuando todavía no se conoce (ej. venta que queda 100% PENDIENTE, sin
+  // ningún pago asociado), se manda como "01" (efectivo) por default — ver
+  // codigoFormaPagoSri().
+  formaPago?: string;
+  tarjetaTipo?: string | null;
 }
 
 interface DatosEmisor {
@@ -47,31 +56,9 @@ interface DatosEmisor {
   obligadoContabilidad: boolean;
 }
 
-// El SRI usa códigos fijos para el tipo de identificación del comprador.
-// Tabla oficial: 04 = RUC, 05 = Cédula, 06 = Pasaporte, 07 = Consumidor Final
-function codigoTipoIdentificacion(tipo: string): string {
-  const mapa: Record<string, string> = {
-    RUC: "04",
-    CEDULA: "05",
-    PASAPORTE: "06",
-    CONSUMIDOR_FINAL: "07",
-  };
-  return mapa[tipo] ?? "05";
-}
-
-// Código de porcentaje de IVA según la tabla oficial del SRI.
-// "2" = 12% (histórico), "4" = 15% (vigente en la mayoría de casos), "0" = 0%
-// IMPORTANTE: verifica el código vigente en la Ficha Técnica antes de producción,
-// el SRI ha cambiado estos códigos cuando cambia la tarifa de IVA por ley.
-function codigoPorcentajeIva(porcentaje: number): string {
-  if (porcentaje === 0) return "0";
-  if (porcentaje === 12) return "2";
-  if (porcentaje === 15) return "4";
-  return "4"; // valor por defecto, AJUSTAR según la tarifa vigente al momento de usar esto
-}
-
 interface GrupoImpuesto {
   codigoPorcentaje: string;
+  tarifa: number; // el % real (15, 12, 0...) — confirmado que <totalImpuesto> también lo pide, no solo el <impuesto> de cada detalle
   baseImponible: Prisma.Decimal;
   valor: Prisma.Decimal;
 }
@@ -85,9 +72,11 @@ function agruparImpuestosPorTarifa(detalles: DetalleParaXml[]): GrupoImpuesto[] 
   const grupos = new Map<string, GrupoImpuesto>();
 
   for (const item of detalles) {
-    const codigoPorcentaje = codigoPorcentajeIva(item.producto.ivaPorcentaje.toNumber());
+    const tarifa = item.producto.ivaPorcentaje.toNumber();
+    const codigoPorcentaje = codigoPorcentajeIva(tarifa);
     const grupo = grupos.get(codigoPorcentaje) ?? {
       codigoPorcentaje,
+      tarifa,
       baseImponible: new Prisma.Decimal(0),
       valor: new Prisma.Decimal(0),
     };
@@ -126,6 +115,10 @@ export function generarXmlFactura(factura: FacturaParaXml, emisor: DatosEmisor):
       .ele("tipoIdentificacionComprador").txt(codigoTipoIdentificacion(factura.cliente.tipoIdentificacion)).up()
       .ele("razonSocialComprador").txt(factura.cliente.razonSocial).up()
       .ele("identificacionComprador").txt(factura.cliente.identificacion).up()
+      // Confirmado contra una factura real autorizada por el SRI (producción,
+      // agosto 2026): el campo va SIEMPRE presente, incluso cuando no se
+      // conoce la dirección real (esa factura real traía literalmente "XX").
+      .ele("direccionComprador").txt(factura.cliente.direccion?.trim() || "XX").up()
       .ele("totalSinImpuestos").txt(factura.subtotal0.add(factura.subtotal12).toFixed(2)).up()
       .ele("totalDescuento").txt("0.00").up()
       .ele("totalConImpuestos");
@@ -135,6 +128,7 @@ export function generarXmlFactura(factura: FacturaParaXml, emisor: DatosEmisor):
       .ele("totalImpuesto")
         .ele("codigo").txt("2").up() // 2 = IVA
         .ele("codigoPorcentaje").txt(grupo.codigoPorcentaje).up()
+        .ele("tarifa").txt(grupo.tarifa.toFixed(2)).up()
         .ele("baseImponible").txt(grupo.baseImponible.toFixed(2)).up()
         .ele("valor").txt(grupo.valor.toFixed(2)).up()
       .up();
@@ -143,12 +137,25 @@ export function generarXmlFactura(factura: FacturaParaXml, emisor: DatosEmisor):
   doc = doc
       .up() // cierra totalConImpuestos
       .ele("propina").txt("0.00").up()
+      // Los 3 campos siguientes son para ventas de EXPORTACIÓN — este
+      // negocio no exporta, así que siempre van en 0.00, pero el elemento
+      // en sí SÍ es obligatorio en el esquema 1.1.0 (confirmado contra una
+      // factura real: aparece siempre, aunque sea con ceros).
+      .ele("fleteInternacional").txt("0.00").up()
+      .ele("seguroInternacional").txt("0.00").up()
+      .ele("gastosTransporteOtros").txt("0.00").up()
       .ele("importeTotal").txt(factura.total.toFixed(2)).up()
       .ele("moneda").txt("DOLAR").up()
       .ele("pagos")
         .ele("pago")
-          .ele("formaPago").txt("01").up() // 01 = sin utilización del sistema financiero (efectivo)
+          .ele("formaPago").txt(codigoFormaPagoSri(factura.formaPago, factura.tarjetaTipo)).up()
           .ele("total").txt(factura.total.toFixed(2)).up()
+          // plazo/unidadTiempo: informativo (plazo de crédito). Se manda
+          // fijo en "0"/"dias" — hasta una factura real de venta a crédito
+          // (Claro, con "fecha máxima de pago" real en el RIDE) lo manda
+          // así, sin calcular los días reales.
+          .ele("plazo").txt("0").up()
+          .ele("unidadTiempo").txt("dias").up()
         .up()
       .up()
     .up() // cierra infoFactura
@@ -161,8 +168,10 @@ export function generarXmlFactura(factura: FacturaParaXml, emisor: DatosEmisor):
       .ele("detalle")
         .ele("codigoPrincipal").txt(item.producto.codigo).up()
         .ele("descripcion").txt(item.producto.nombre).up()
-        .ele("cantidad").txt(item.cantidad.toString()).up()
-        .ele("precioUnitario").txt(item.precioUnitario.toFixed(2)).up()
+        // Confirmado contra una factura real: cantidad/precioUnitario van
+        // con 6 decimales, no 2 (a diferencia de los montos en dólares).
+        .ele("cantidad").txt(item.cantidad.toFixed(6)).up()
+        .ele("precioUnitario").txt(item.precioUnitario.toFixed(6)).up()
         .ele("descuento").txt(item.descuento.toFixed(2)).up()
         .ele("precioTotalSinImpuesto").txt(item.subtotal.toFixed(2)).up()
         .ele("impuestos")

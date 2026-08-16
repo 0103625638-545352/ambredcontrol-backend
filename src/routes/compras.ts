@@ -16,6 +16,7 @@ import { leerRangoFechas } from "../utils/rangoFechas";
 import { lineasPorCompra } from "../utils/contabilidad";
 import { crearAsiento, revertirAsientoDeOrigen } from "../utils/asientos";
 import { crearPagoConAsiento } from "../utils/pagos";
+import { validarPlanCuotas, type CuotaInput } from "../utils/cuotas";
 import { totalDevueltoDeCompra } from "../utils/devolucionesCompra";
 import { actualizarCostoPromedio } from "../utils/costeoInventario";
 
@@ -37,6 +38,11 @@ interface CrearCompraBody {
   bodegaId: number;
   items: ItemCompra[];
   fechaVencimiento?: string; // opcional: toda compra arranca sin pagar, así que siempre tiene sentido preguntarlo
+  cuotas?: CuotaInput[]; // plan de pago a plazos al proveedor, ver modelo Cuota
+  // Código de la tabla "Sustento Tributario" del SRI (ver el comentario del
+  // campo en schema.prisma) — obligatorio para compras nuevas, así el ATS
+  // (ver GET /reportes/ats) ya no sale con esta columna vacía.
+  sustentoTributario: string;
 }
 
 // GET /compras
@@ -182,7 +188,8 @@ comprasRouter.get("/:id", async (req: Request, res: Response) => {
       include: {
         proveedor: true,
         detalles: { include: { producto: true, devolucionesDetalle: true } },
-        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } },
+        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+        cuotas: { orderBy: { numero: "asc" } },
         retencion: { select: { id: true, secuencial: true, claveAcceso: true, estado: true, total: true } },
       },
     });
@@ -199,7 +206,20 @@ comprasRouter.get("/:id", async (req: Request, res: Response) => {
 comprasRouter.post("/:id/pagos", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { monto, formaPago, referencia, cuentaBancariaId } = req.body;
+    const {
+      monto,
+      formaPago,
+      referencia,
+      cuentaBancariaId,
+      bancoOrigenId,
+      numeroCuentaOrigen,
+      tarjetaUltimosDigitos,
+      tarjetaTipo,
+      tarjetaReferencia,
+      tarjetaLote,
+      chequeNumero,
+      chequeFechaCobro,
+    } = req.body;
 
     if (typeof monto !== "number" || monto <= 0) {
       return res.status(400).json({ error: "monto debe ser un número mayor a 0" });
@@ -233,6 +253,19 @@ comprasRouter.post("/:id/pagos", async (req: Request, res: Response) => {
       return res.status(400).json({ error: `El monto supera el saldo pendiente ($${saldoPendiente.toFixed(2)})` });
     }
 
+    // Si esta compra tiene un plan de Cuotas, el pago es ESTRICTO: solo se
+    // puede pagar la próxima cuota pendiente (en orden), por su monto EXACTO
+    // — mismo criterio que registrarPagoDeFactura en facturas.ts.
+    const proximaCuota = await prisma.cuota.findFirst({
+      where: { compraId: id, estado: "PENDIENTE" },
+      orderBy: { numero: "asc" },
+    });
+    if (proximaCuota && !montoDecimal.equals(proximaCuota.monto)) {
+      return res.status(400).json({
+        error: `Esta compra tiene un plan de cuotas: hay que pagar la cuota ${proximaCuota.numero} por $${proximaCuota.monto.toFixed(2)} exacto, en orden`,
+      });
+    }
+
     const compraActualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await crearPagoConAsiento(tx, {
         compraId: id,
@@ -240,14 +273,29 @@ comprasRouter.post("/:id/pagos", async (req: Request, res: Response) => {
         formaPago,
         referencia,
         cuentaBancariaId: exigeCuentaBancaria ? cuentaBancariaId : undefined,
+        cuotaId: proximaCuota?.id,
+        bancoOrigenId,
+        numeroCuentaOrigen,
+        tarjetaUltimosDigitos,
+        tarjetaTipo,
+        tarjetaReferencia,
+        tarjetaLote,
+        chequeNumero,
+        chequeFechaCobro,
         descripcion: `Pago compra Fact. ${compra.numeroFactura}`,
         usuarioId: req.usuario!.usuarioId,
       });
+      if (proximaCuota) {
+        await tx.cuota.update({ where: { id: proximaCuota.id }, data: { estado: "PAGADA" } });
+      }
       const nuevoMontoPagado = compra.montoPagado.add(montoDecimal);
       return tx.compra.update({
         where: { id },
         data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, compra.total) },
-        include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+        include: {
+          pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+          cuotas: { orderBy: { numero: "asc" } },
+        },
       });
     });
 
@@ -275,12 +323,20 @@ comprasRouter.delete("/:id/pagos/:pagoId", async (req: Request, res: Response) =
 
     const compraActualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.pago.delete({ where: { id: pagoId } });
+      // Si este pago había liquidado una Cuota, la reabrimos — mismo
+      // criterio que en facturas.ts/notasVenta.ts.
+      if (pago.cuotaId) {
+        await tx.cuota.update({ where: { id: pago.cuotaId }, data: { estado: "PENDIENTE" } });
+      }
       await revertirAsientoDeOrigen(tx, "PAGO", pagoId, req.usuario!.usuarioId);
       const nuevoMontoPagado = compra.montoPagado.sub(pago.monto);
       const actualizada = await tx.compra.update({
         where: { id },
         data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, compra.total) },
-        include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+        include: {
+          pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+          cuotas: { orderBy: { numero: "asc" } },
+        },
       });
 
       await registrarAuditoria(tx, {
@@ -344,13 +400,17 @@ comprasRouter.get("/:id/recibo", async (req: Request, res: Response) => {
 // queda como ENTRADA — el resto (transacción atómica, cálculo de IVA con
 // Decimal) sigue el mismo patrón que /facturas y /notas-venta.
 comprasRouter.post("/", async (req: Request, res: Response) => {
-  const { proveedorId, numeroFactura, bodegaId, items, fechaVencimiento } = req.body as CrearCompraBody;
+  const { proveedorId, numeroFactura, bodegaId, items, fechaVencimiento, cuotas, sustentoTributario } = req.body as CrearCompraBody;
 
   if (!proveedorId || !numeroFactura || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "proveedorId, numeroFactura e items (con al menos 1 producto) son obligatorios" });
   }
+  if (!sustentoTributario || !sustentoTributario.trim()) {
+    return res.status(400).json({ error: "sustentoTributario es obligatorio (código de la tabla del SRI, ej. 01, 06)" });
+  }
 
   try {
+    if (cuotas && cuotas.length > 0) validarPlanCuotas(cuotas);
     const sucursal = await sucursalDelUsuarioActual(req.usuario!.usuarioId);
     await bodegaValidaEnSucursal(bodegaId, sucursal.id);
     // Igual que en facturas/notas de venta: si quien registra la compra
@@ -464,10 +524,22 @@ comprasRouter.post("/", async (req: Request, res: Response) => {
           iva: ivaTotal,
           total,
           fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : undefined,
+          sustentoTributario: sustentoTributario.trim(),
           detalles: { create: detallesData },
         },
         include: { detalles: { include: { producto: true } }, proveedor: true },
       });
+
+      if (cuotas && cuotas.length > 0) {
+        await tx.cuota.createMany({
+          data: cuotas.map((c) => ({
+            compraId: compraCreada.id,
+            numero: c.numero,
+            monto: c.monto,
+            fechaVencimiento: new Date(c.fechaVencimiento),
+          })),
+        });
+      }
 
       await crearAsiento(tx, {
         origen: "COMPRA",
@@ -512,8 +584,50 @@ comprasRouter.post("/", async (req: Request, res: Response) => {
     if (error.code === "P2002") {
       return res.status(409).json({ error: "Ya registraste una compra con ese número de factura para este proveedor" });
     }
+    if (error.message === "CUOTAS_VACIAS") return res.status(400).json({ error: "El plan de cuotas no puede estar vacío" });
+    if (error.message === "CUOTAS_NUMERO_INVALIDO") {
+      return res.status(400).json({ error: "Las cuotas deben numerarse 1, 2, 3... sin saltos ni repetidos" });
+    }
+    if (error.message === "CUOTAS_MONTO_INVALIDO") return res.status(400).json({ error: "El monto de cada cuota debe ser mayor a 0" });
+    if (error.message === "CUOTAS_FECHA_INVALIDA") return res.status(400).json({ error: "Cada cuota necesita una fecha de vencimiento válida" });
     console.error(error);
     res.status(500).json({ error: "Error al registrar la compra" });
+  }
+});
+
+// PATCH /compras/:id/sustento-tributario
+// Completa o corrige el código de sustento tributario de una compra que ya
+// existe — el único campo editable de una Compra después de creada (el
+// resto queda fijo porque ya movió stock/contabilidad). Pensado sobre todo
+// para compras registradas ANTES de que este campo existiera (ver
+// Compra.sustentoTributario en schema.prisma), para que el reporte ATS
+// (GET /reportes/ats) no se quede con esa columna vacía para siempre.
+comprasRouter.patch("/:id/sustento-tributario", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { sustentoTributario } = req.body;
+    if (!sustentoTributario || !String(sustentoTributario).trim()) {
+      return res.status(400).json({ error: "sustentoTributario es obligatorio" });
+    }
+
+    const compra = await prisma.compra.update({
+      where: { id },
+      data: { sustentoTributario: String(sustentoTributario).trim() },
+    });
+
+    await registrarAuditoria(prisma, {
+      usuarioId: req.usuario!.usuarioId,
+      accion: "EDITAR_SUSTENTO_TRIBUTARIO_COMPRA",
+      entidad: "Compra",
+      entidadId: compra.id,
+      detalle: `Compra Fact. ${compra.numeroFactura}: sustento tributario = ${compra.sustentoTributario}`,
+    });
+
+    res.json(compra);
+  } catch (error: any) {
+    if (error.code === "P2025") return res.status(404).json({ error: "Compra no encontrada" });
+    console.error(error);
+    res.status(500).json({ error: "Error al actualizar el sustento tributario" });
   }
 });
 

@@ -26,6 +26,7 @@ import { precioParaCliente } from "../utils/precios";
 import { lineasPorVenta, lineasPorCostoVenta } from "../utils/contabilidad";
 import { crearAsiento, revertirAsientoDeOrigen } from "../utils/asientos";
 import { crearPagoConAsiento } from "../utils/pagos";
+import { validarPlanCuotas, type CuotaInput } from "../utils/cuotas";
 import { reconciliarClienteInternet } from "../utils/gestionServicioInternet";
 
 export const facturasRouter = Router();
@@ -113,9 +114,24 @@ async function enviarFacturaAutorizadaPorCorreo(factura: any, xmlAutorizado: str
   }
 }
 
+// Forma de pago REAL a declarar en el XML (ver codigoFormaPagoSri en
+// facturaXml.ts) — quien llama la pasa explícita cuando ya la conoce con
+// certeza (ver enviarFacturaAlSri más abajo), para no depender de una
+// carrera entre el envío al SRI (fire-and-forget apenas se crea la factura)
+// y el registro del abono inicial (una llamada HTTP aparte, ver
+// PuntoDeVentaPage.tsx) — esa carrera es real y no determinística.
+interface FormaPagoParaXml {
+  formaPago: string;
+  tarjetaTipo?: string | null;
+}
+
 // Función reutilizable: dado un registro de factura (con sus relaciones cargadas),
 // arma los datos que generarXmlFactura necesita y devuelve el XML sin firmar.
-function construirXmlDeFactura(factura: any): string {
+function construirXmlDeFactura(factura: any, formaPagoOverride?: FormaPagoParaXml): string {
+  // Sin override explícito: si la factura ya trae pagos cargados (ver el
+  // include de quien llama), usamos el más antiguo como mejor estimación.
+  // Sin pagos (ej. venta 100% PENDIENTE) generarXmlFactura cae en "01" sola.
+  const formaPago = formaPagoOverride ?? factura.pagos?.[0];
   return generarXmlFactura(
     {
       claveAcceso: factura.claveAcceso,
@@ -127,6 +143,8 @@ function construirXmlDeFactura(factura: any): string {
       total: factura.total,
       cliente: factura.cliente,
       detalles: factura.detalles,
+      formaPago: formaPago?.formaPago,
+      tarjetaTipo: formaPago?.tarjetaTipo,
     },
     datosEmisorDeEmpresa(empresaActiva())
   );
@@ -144,6 +162,11 @@ interface CrearFacturaBody {
   bodegaId: number;
   items: ItemCarrito[];
   fechaVencimiento?: string; // opcional: solo tiene sentido si la venta queda con saldo pendiente
+  // OJO: el plan de cuotas NO se crea acá aunque la venta lo pida — se crea
+  // en registrarPagoDeFactura, junto con el abono inicial (ver DatosPago).
+  // Si se creara acá, el abono inicial (que llega en una llamada aparte,
+  // justo después) chocaría con la cuota 1 ya pendiente y la validación
+  // estricta de cobro en orden lo rechazaría por no coincidir el monto.
 }
 
 // Núcleo de "crear una factura" (validar stock/precio, sacar secuencial,
@@ -354,7 +377,8 @@ facturasRouter.get("/:id", async (req: Request, res: Response) => {
       include: {
         cliente: true,
         detalles: { include: { producto: true } },
-        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } },
+        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+        cuotas: { orderBy: { numero: "asc" } },
         retencionRecibida: { select: { id: true, numeroComprobante: true, total: true } },
       },
     });
@@ -376,6 +400,21 @@ interface DatosPago {
   formaPago: string;
   referencia?: string;
   cuentaBancariaId?: number;
+  bancoOrigenId?: number;
+  numeroCuentaOrigen?: string;
+  tarjetaUltimosDigitos?: string;
+  tarjetaTipo?: string;
+  tarjetaReferencia?: string;
+  tarjetaLote?: string;
+  chequeNumero?: string;
+  chequeFechaCobro?: string;
+  // Plan de cuotas del SALDO que queda después de este pago (ver modelo
+  // Cuota) — solo tiene sentido en el primer abono de una venta recién
+  // creada (ver PuntoDeVentaPage.tsx). Se crea DESPUÉS de aplicar este pago
+  // (nunca antes): si existiera ya al momento de registrar el abono, la
+  // validación de "cobro estricto en orden" lo confundiría con el pago de
+  // la cuota 1 y lo rechazaría por no coincidir el monto exacto.
+  cuotas?: CuotaInput[];
 }
 
 // Validación compartida por registrarPagoDeFactura (pago contra una factura
@@ -411,8 +450,22 @@ async function validarDatosPago(datos: DatosPago): Promise<{ montoDecimal: Prism
 // en vez de responder HTTP directamente — cada llamador decide qué hacer
 // con eso (ver responderErrorRegistrarPago).
 export async function registrarPagoDeFactura(facturaId: number, datos: DatosPago, usuarioId: number) {
-  const { formaPago, referencia, cuentaBancariaId } = datos;
+  const {
+    formaPago,
+    referencia,
+    cuentaBancariaId,
+    bancoOrigenId,
+    numeroCuentaOrigen,
+    tarjetaUltimosDigitos,
+    tarjetaTipo,
+    tarjetaReferencia,
+    tarjetaLote,
+    chequeNumero,
+    chequeFechaCobro,
+    cuotas,
+  } = datos;
   const { montoDecimal, exigeCuentaBancaria } = await validarDatosPago(datos);
+  if (cuotas && cuotas.length > 0) validarPlanCuotas(cuotas);
 
   const factura = await prisma.factura.findUnique({ where: { id: facturaId } });
   if (!factura) throw new Error("FACTURA_NO_ENCONTRADA");
@@ -423,6 +476,17 @@ export async function registrarPagoDeFactura(facturaId: number, datos: DatosPago
     throw new Error(`MONTO_SUPERA_SALDO:${saldoPendiente.toFixed(2)}`);
   }
 
+  // Si esta factura tiene un plan de Cuotas, el cobro es ESTRICTO: solo se
+  // puede pagar la próxima cuota pendiente (en orden), y por su monto EXACTO
+  // — no se acepta un abono libre mientras haya cuotas sin liquidar.
+  const proximaCuota = await prisma.cuota.findFirst({
+    where: { facturaId, estado: "PENDIENTE" },
+    orderBy: { numero: "asc" },
+  });
+  if (proximaCuota && !montoDecimal.equals(proximaCuota.monto)) {
+    throw new Error(`MONTO_DEBE_COINCIDIR_CUOTA:${proximaCuota.numero}:${proximaCuota.monto.toFixed(2)}`);
+  }
+
   const { facturaActualizada, pagoId } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const pago = await crearPagoConAsiento(tx, {
       facturaId,
@@ -430,14 +494,41 @@ export async function registrarPagoDeFactura(facturaId: number, datos: DatosPago
       formaPago,
       referencia,
       cuentaBancariaId: exigeCuentaBancaria ? cuentaBancariaId : undefined,
+      cuotaId: proximaCuota?.id,
+      bancoOrigenId,
+      numeroCuentaOrigen,
+      tarjetaUltimosDigitos,
+      tarjetaTipo,
+      tarjetaReferencia,
+      tarjetaLote,
+      chequeNumero,
+      chequeFechaCobro,
       descripcion: `Cobro factura ${factura.secuencial}`,
       usuarioId,
     });
+    if (proximaCuota) {
+      await tx.cuota.update({ where: { id: proximaCuota.id }, data: { estado: "PAGADA" } });
+    }
+    // El plan de cuotas del SALDO RESTANTE se crea acá, DESPUÉS de aplicar
+    // este pago — nunca antes (ver el comentario en DatosPago.cuotas).
+    if (cuotas && cuotas.length > 0) {
+      await tx.cuota.createMany({
+        data: cuotas.map((c) => ({
+          facturaId,
+          numero: c.numero,
+          monto: c.monto,
+          fechaVencimiento: new Date(c.fechaVencimiento),
+        })),
+      });
+    }
     const nuevoMontoPagado = factura.montoPagado.add(montoDecimal);
     const actualizada = await tx.factura.update({
       where: { id: facturaId },
       data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, factura.total) },
-      include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+      include: {
+        pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+        cuotas: { orderBy: { numero: "asc" } },
+      },
     });
     return { facturaActualizada: actualizada, pagoId: pago.id };
   });
@@ -490,7 +581,19 @@ export async function registrarPagoDeFactura(facturaId: number, datos: DatosPago
 // comparar el saldo (no hay factura todavía) — cualquier monto positivo
 // vale, es el admin quien decide cuánto se cobró.
 export async function registrarCobroSinFactura(clienteId: number, datos: DatosPago, usuarioId: number) {
-  const { formaPago, referencia, cuentaBancariaId } = datos;
+  const {
+    formaPago,
+    referencia,
+    cuentaBancariaId,
+    bancoOrigenId,
+    numeroCuentaOrigen,
+    tarjetaUltimosDigitos,
+    tarjetaTipo,
+    tarjetaReferencia,
+    tarjetaLote,
+    chequeNumero,
+    chequeFechaCobro,
+  } = datos;
   const { montoDecimal, exigeCuentaBancaria } = await validarDatosPago(datos);
 
   const cliente = await prisma.cliente.findUnique({
@@ -516,6 +619,14 @@ export async function registrarCobroSinFactura(clienteId: number, datos: DatosPa
       formaPago,
       referencia,
       cuentaBancariaId: exigeCuentaBancaria ? cuentaBancariaId : undefined,
+      bancoOrigenId,
+      numeroCuentaOrigen,
+      tarjetaUltimosDigitos,
+      tarjetaTipo,
+      tarjetaReferencia,
+      tarjetaLote,
+      chequeNumero,
+      chequeFechaCobro,
       descripcion: `Cobro anticipado de internet — ${cliente.razonSocial} (pendiente de facturar)`,
       usuarioId,
     })
@@ -556,6 +667,16 @@ export function responderErrorRegistrarPago(error: any, res: Response) {
   if (typeof error.message === "string" && error.message.startsWith("MONTO_SUPERA_SALDO")) {
     return res.status(400).json({ error: `El monto supera el saldo pendiente ($${error.message.split(":")[1]})` });
   }
+  if (typeof error.message === "string" && error.message.startsWith("MONTO_DEBE_COINCIDIR_CUOTA")) {
+    const [, numero, monto] = error.message.split(":");
+    return res.status(400).json({ error: `Este documento tiene un plan de cuotas: hay que pagar la cuota ${numero} por $${monto} exacto, en orden` });
+  }
+  if (error.message === "CUOTAS_VACIAS") return res.status(400).json({ error: "El plan de cuotas no puede estar vacío" });
+  if (error.message === "CUOTAS_NUMERO_INVALIDO") {
+    return res.status(400).json({ error: "Las cuotas deben numerarse 1, 2, 3... sin saltos ni repetidos" });
+  }
+  if (error.message === "CUOTAS_MONTO_INVALIDO") return res.status(400).json({ error: "El monto de cada cuota debe ser mayor a 0" });
+  if (error.message === "CUOTAS_FECHA_INVALIDA") return res.status(400).json({ error: "Cada cuota necesita una fecha de vencimiento válida" });
   console.error(error);
   return res.status(500).json({ error: "Error al registrar el pago" });
 }
@@ -563,8 +684,40 @@ export function responderErrorRegistrarPago(error: any, res: Response) {
 facturasRouter.post("/:id/pagos", requirePermiso("ventas"), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { monto, formaPago, referencia, cuentaBancariaId } = req.body;
-    const resultado = await registrarPagoDeFactura(id, { monto, formaPago, referencia, cuentaBancariaId }, req.usuario!.usuarioId);
+    const {
+      monto,
+      formaPago,
+      referencia,
+      cuentaBancariaId,
+      bancoOrigenId,
+      numeroCuentaOrigen,
+      tarjetaUltimosDigitos,
+      tarjetaTipo,
+      tarjetaReferencia,
+      tarjetaLote,
+      chequeNumero,
+      chequeFechaCobro,
+      cuotas,
+    } = req.body;
+    const resultado = await registrarPagoDeFactura(
+      id,
+      {
+        monto,
+        formaPago,
+        referencia,
+        cuentaBancariaId,
+        bancoOrigenId,
+        numeroCuentaOrigen,
+        tarjetaUltimosDigitos,
+        tarjetaTipo,
+        tarjetaReferencia,
+        tarjetaLote,
+        chequeNumero,
+        chequeFechaCobro,
+        cuotas,
+      },
+      req.usuario!.usuarioId
+    );
     res.status(201).json({ ...resultado.factura, avisoInternet: resultado.avisoInternet });
   } catch (error: any) {
     responderErrorRegistrarPago(error, res);
@@ -589,12 +742,21 @@ facturasRouter.delete("/:id/pagos/:pagoId", async (req: Request, res: Response) 
 
     const facturaActualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.pago.delete({ where: { id: pagoId } });
+      // Si este pago había liquidado una Cuota, la reabrimos — si no, el
+      // plan quedaría con esa cuota marcada PAGADA sin ningún Pago real que
+      // lo respalde, y ROTA la regla de "se cobra en orden" para siempre.
+      if (pago.cuotaId) {
+        await tx.cuota.update({ where: { id: pago.cuotaId }, data: { estado: "PENDIENTE" } });
+      }
       await revertirAsientoDeOrigen(tx, "PAGO", pagoId, req.usuario!.usuarioId);
       const nuevoMontoPagado = factura.montoPagado.sub(pago.monto);
       const actualizada = await tx.factura.update({
         where: { id },
         data: { montoPagado: nuevoMontoPagado, estadoPago: calcularEstadoPago(nuevoMontoPagado, factura.total) },
-        include: { pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true } } },
+        include: {
+          pagos: { orderBy: { fecha: "desc" }, include: { cuentaBancaria: true, bancoOrigen: true, cuota: { select: { numero: true } } } },
+          cuotas: { orderBy: { numero: "asc" } },
+        },
       });
 
       await registrarAuditoria(tx, {
@@ -623,7 +785,7 @@ facturasRouter.get("/:id/xml", requirePermiso("facturas_sri"), async (req: Reque
     const id = Number(req.params.id);
     const factura = await prisma.factura.findUnique({
       where: { id },
-      include: { cliente: true, detalles: { include: { producto: true } } },
+      include: { cliente: true, detalles: { include: { producto: true } }, pagos: { orderBy: { fecha: "asc" }, take: 1 } },
     });
 
     if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
@@ -648,7 +810,7 @@ facturasRouter.get("/:id/xml-firmado", requirePermiso("facturas_sri"), async (re
     const id = Number(req.params.id);
     const factura = await prisma.factura.findUnique({
       where: { id },
-      include: { cliente: true, detalles: { include: { producto: true } } },
+      include: { cliente: true, detalles: { include: { producto: true } }, pagos: { orderBy: { fecha: "asc" }, take: 1 } },
     });
 
     if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
@@ -771,10 +933,23 @@ facturasRouter.get("/:id/recibo-termico", async (req: Request, res: Response) =>
 // las que quedaron CREADA sin enviarse (jobs/reintentoAutorizacionSri.ts).
 // Lanza FACTURA_NO_ENCONTRADA / SIN_CLAVE_ACCESO / SIN_CERTIFICADO en vez de
 // responder HTTP directamente — cada llamador decide qué hacer con eso.
-export async function enviarFacturaAlSri(facturaId: number) {
+//
+// formaPagoOverride: la forma de pago REAL a declarar en el XML (ver
+// construirXmlDeFactura) — la pasa explícita POST / (que la recibe del
+// frontend en el mismo instante en que se confirma la venta, ver
+// PuntoDeVentaPage.tsx) para no depender de si el abono inicial ya se
+// alcanzó a registrar cuando este envío fire-and-forget arranca. El job de
+// reintentos y el botón manual "Enviar al SRI" no la tienen a mano — para
+// esos, construirXmlDeFactura cae sola al Pago más antiguo ya registrado
+// (fetched acá abajo), o a "01" si todavía no hay ninguno.
+export async function enviarFacturaAlSri(facturaId: number, formaPagoOverride?: FormaPagoParaXml) {
   const factura = await prisma.factura.findUnique({
     where: { id: facturaId },
-    include: { cliente: true, detalles: { include: { producto: true } } },
+    include: {
+      cliente: true,
+      detalles: { include: { producto: true } },
+      pagos: { orderBy: { fecha: "asc" }, take: 1 },
+    },
   });
 
   if (!factura) throw new Error("FACTURA_NO_ENCONTRADA");
@@ -786,7 +961,7 @@ export async function enviarFacturaAlSri(facturaId: number) {
   const urlRecepcion = obtenerUrlsSri(empresa.ambienteSri).recepcion;
 
   // --- Paso 1: firmar ---
-  const xmlSinFirmar = construirXmlDeFactura(factura);
+  const xmlSinFirmar = construirXmlDeFactura(factura, formaPagoOverride);
   const credenciales = cargarCertificadoP12(rutaAbsoluta(empresa.certificadoP12Path), empresa.certificadoP12Password);
   const xmlFirmado = firmarXadesBes(xmlSinFirmar, credenciales);
 
@@ -978,6 +1153,14 @@ export function responderErrorCrearFactura(error: any, res: Response) {
 // Body esperado: { clienteId: number, items: [{ productoId, cantidad, descuento? }] }
 facturasRouter.post("/", requirePermiso("ventas"), async (req: Request, res: Response) => {
   const { clienteId, bodegaId, items, fechaVencimiento } = req.body as CrearFacturaBody;
+  // Forma de pago que el cajero eligió en pantalla AL MOMENTO de confirmar
+  // la venta (ver PuntoDeVentaPage.tsx) — opcional (una venta que queda
+  // 100% PENDIENTE no tiene ninguna elegida), y a propósito NO crea ningún
+  // Pago acá: eso lo sigue haciendo la llamada aparte a POST /:id/pagos.
+  // Solo sirve para que el XML que se manda al SRI (ver más abajo) declare
+  // la forma de pago real, sin depender de si ese otro POST ya se alcanzó a
+  // procesar cuando arranca el envío automático.
+  const { formaPago, tarjetaTipo } = req.body as { formaPago?: string; tarjetaTipo?: string };
 
   if (!clienteId || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "clienteId e items (con al menos 1 producto) son obligatorios" });
@@ -995,7 +1178,7 @@ facturasRouter.post("/", requirePermiso("ventas"), async (req: Request, res: Res
     // se queda en CREADA — nunca se revierte la venta ya guardada — y el job
     // en segundo plano (jobs/reintentoAutorizacionSri.ts) la reintenta sola
     // un par de minutos después.
-    enviarFacturaAlSri(factura.id).catch((error: any) => {
+    enviarFacturaAlSri(factura.id, formaPago ? { formaPago, tarjetaTipo } : undefined).catch((error: any) => {
       console.error(`[auto-envio-sri] Factura ${factura.secuencial} quedó CREADA sin poder enviarse: ${error.message}`);
     });
   } catch (error: any) {

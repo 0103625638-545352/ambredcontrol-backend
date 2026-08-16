@@ -24,6 +24,20 @@ interface CrearPagoConAsientoInput {
   // Solo cuando formaPago es TRANSFERENCIA/TARJETA/CHEQUE — ver validación en
   // routes/facturas.ts, compras.ts, notasVenta.ts.
   cuentaBancariaId?: number;
+  // Datos de ORIGEN del pago (banco/cuenta/tarjeta de quien pagó) — todos
+  // opcionales, ninguno se exige acá. Ver el comentario del modelo Pago en
+  // schema.prisma para qué campos aplican según formaPago.
+  bancoOrigenId?: number;
+  numeroCuentaOrigen?: string;
+  tarjetaUltimosDigitos?: string;
+  tarjetaTipo?: string;
+  tarjetaReferencia?: string;
+  tarjetaLote?: string;
+  chequeNumero?: string;
+  chequeFechaCobro?: string; // fecha ISO ("2026-08-20"), se convierte a Date acá
+  // Si este pago liquida una Cuota de un plan a plazos (ver modelo Cuota) —
+  // quien llama ya validó que el monto coincide exacto con esa cuota.
+  cuotaId?: number;
   descripcion: string;
   usuarioId?: number;
   fecha?: Date;
@@ -45,6 +59,15 @@ export async function crearPagoConAsiento(tx: Prisma.TransactionClient, input: C
       formaPago: input.formaPago,
       referencia: input.referencia || undefined,
       cuentaBancariaId: input.cuentaBancariaId,
+      bancoOrigenId: input.bancoOrigenId || undefined,
+      numeroCuentaOrigen: input.numeroCuentaOrigen || undefined,
+      tarjetaUltimosDigitos: input.tarjetaUltimosDigitos || undefined,
+      tarjetaTipo: input.tarjetaTipo || undefined,
+      tarjetaReferencia: input.tarjetaReferencia || undefined,
+      tarjetaLote: input.tarjetaLote || undefined,
+      chequeNumero: input.chequeNumero || undefined,
+      chequeFechaCobro: input.chequeFechaCobro ? new Date(input.chequeFechaCobro) : undefined,
+      cuotaId: input.cuotaId,
     },
   });
 

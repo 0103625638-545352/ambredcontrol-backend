@@ -1,16 +1,18 @@
-// Aviso propio y enfocado de facturas/notas de venta que están a pocos días
-// de vencer — a diferencia de jobs/resumenDiario.ts (que ya lista TODAS las
-// cuentas por cobrar pendientes mezcladas con stock bajo, certificado, etc.),
-// esto manda un correo aparte solo cuando hay documentos cerca de su
-// vencimiento, para que no se pierdan como una línea más en un resumen largo.
+// Aviso propio y enfocado de cobros (facturas/notas de venta a clientes) Y
+// pagos (compras a proveedores) que están a pocos días de vencer — a
+// diferencia de jobs/resumenDiario.ts (que ya lista TODAS las cuentas por
+// cobrar pendientes mezcladas con stock bajo, certificado, etc.), esto manda
+// un correo aparte solo cuando hay algo cerca de su vencimiento, para que no
+// se pierda como una línea más en un resumen largo.
 //
 // Mismo criterio que resumenDiario.ts/backupDiario.ts: NO corre de
 // inmediato al arrancar el servidor, solo revisa cada 15 minutos si ya es
 // la hora y si no se ejecutó todavía hoy.
-import { ejecutarConEmpresa, empresaActiva } from "../db";
+import { ejecutarConEmpresa, empresaActiva, prisma } from "../db";
 import { listarEmpresas } from "../utils/empresas";
 import { enviarCorreoTextoPlano } from "../utils/email";
-import { obtenerCuentasProximasAVencer } from "../utils/alertasNegocio";
+import { obtenerCuentasProximasAVencer, obtenerCuentasPorPagarProximasAVencer } from "../utils/alertasNegocio";
+import { calcularDiasParaVencer } from "../utils/vencimientos";
 
 const QUINCE_MINUTOS_MS = 15 * 60_000;
 
@@ -39,27 +41,86 @@ export async function componerYEnviarAlertaVencimientos(): Promise<boolean> {
 
   const umbralDias = Number(process.env.ALERTA_VENCIMIENTOS_DIAS_ANTES) || 3;
   const proximas = await obtenerCuentasProximasAVencer(umbralDias);
+  const proximasPorPagar = await obtenerCuentasPorPagarProximasAVencer(umbralDias);
+
+  // Cuotas de un plan a plazos (ver modelo Cuota) que vencen pronto — control
+  // de proximidad por CUOTA individual, no por documento completo (ver
+  // GET /reportes/cuotas-por-cobrar y /reportes/cuotas-por-pagar para el
+  // detalle en pantalla). Una sola consulta trae las de cobro Y las de pago
+  // — cuál relación viene no-nula (factura/notaVenta vs. compra) distingue
+  // el tipo, mismo criterio que Pago.
+  const ahora = new Date();
+  const cuotasPendientes = await prisma.cuota.findMany({
+    where: { estado: "PENDIENTE" },
+    include: {
+      factura: { select: { secuencial: true, cliente: { select: { razonSocial: true } } } },
+      notaVenta: { select: { secuencial: true, cliente: { select: { razonSocial: true } } } },
+      compra: { select: { numeroFactura: true, proveedor: { select: { razonSocial: true } } } },
+    },
+    orderBy: { fechaVencimiento: "asc" },
+  });
+  const cuotasProximas = cuotasPendientes.filter((c: (typeof cuotasPendientes)[number]) => {
+    const dias = calcularDiasParaVencer(c.fechaVencimiento, ahora);
+    return dias !== null && dias <= umbralDias;
+  });
+  const cuotasCobroProximas = cuotasProximas.filter((c: (typeof cuotasProximas)[number]) => !c.compra);
+  const cuotasPagoProximas = cuotasProximas.filter((c: (typeof cuotasProximas)[number]) => c.compra);
 
   // Un aviso de "no hay nada por vencer" sería puro ruido diario — a
   // diferencia del resumen general (que sí siempre se manda por ser un
   // digest), este correo solo tiene sentido cuando hay algo que avisar.
-  if (proximas.length === 0) {
+  if (proximas.length === 0 && proximasPorPagar.length === 0 && cuotasProximas.length === 0) {
     return false;
   }
 
   const lineas: string[] = [];
-  lineas.push(`Documentos que vencen en ${umbralDias} día(s) o menos — ${empresa.nombre} (${fechaLocalYMD(new Date())})`);
-  lineas.push("");
-  for (const c of proximas) {
-    const fecha = c.fechaVencimiento ? new Date(c.fechaVencimiento).toISOString().slice(0, 10) : "—";
-    lineas.push(
-      `  - ${c.tipo === "FACTURA" ? "Factura" : "Nota de venta"} ${c.secuencial} · ${c.clienteNombre} · saldo $${c.saldo} · vence ${fecha}`
-    );
+  lineas.push(`Cobros y pagos que vencen en ${umbralDias} día(s) o menos — ${empresa.nombre} (${fechaLocalYMD(new Date())})`);
+
+  if (proximas.length > 0) {
+    lineas.push("");
+    lineas.push("Documentos por cobrar:");
+    for (const c of proximas) {
+      const fecha = c.fechaVencimiento ? new Date(c.fechaVencimiento).toISOString().slice(0, 10) : "—";
+      lineas.push(
+        `  - ${c.tipo === "FACTURA" ? "Factura" : "Nota de venta"} ${c.secuencial} · ${c.clienteNombre} · saldo $${c.saldo} · vence ${fecha}`
+      );
+    }
+  }
+  if (cuotasCobroProximas.length > 0) {
+    lineas.push("");
+    lineas.push("Cuotas por cobrar (planes a plazos con clientes):");
+    for (const c of cuotasCobroProximas) {
+      const documento = c.factura ?? c.notaVenta;
+      const tipoTexto = c.factura ? "Factura" : "Nota de venta";
+      const fecha = c.fechaVencimiento.toISOString().slice(0, 10);
+      lineas.push(
+        `  - ${tipoTexto} ${documento!.secuencial} · ${documento!.cliente.razonSocial} · cuota ${c.numero} · $${c.monto.toFixed(2)} · vence ${fecha}`
+      );
+    }
+  }
+  if (proximasPorPagar.length > 0) {
+    lineas.push("");
+    lineas.push("Compras por pagar:");
+    for (const c of proximasPorPagar) {
+      const fecha = c.fechaVencimiento ? new Date(c.fechaVencimiento).toISOString().slice(0, 10) : "—";
+      lineas.push(`  - Compra ${c.numeroFactura} · ${c.proveedorNombre} · saldo $${c.saldo} · vence ${fecha}`);
+    }
+  }
+  if (cuotasPagoProximas.length > 0) {
+    lineas.push("");
+    lineas.push("Cuotas por pagar (planes a plazos con proveedores):");
+    for (const c of cuotasPagoProximas) {
+      const fecha = c.fechaVencimiento.toISOString().slice(0, 10);
+      lineas.push(
+        `  - Compra ${c.compra!.numeroFactura} · ${c.compra!.proveedor.razonSocial} · cuota ${c.numero} · $${c.monto.toFixed(2)} · vence ${fecha}`
+      );
+    }
   }
 
+  const totalAvisos = proximas.length + proximasPorPagar.length + cuotasProximas.length;
   return enviarCorreoTextoPlano({
     destinatario,
-    asunto: `⏰ ${proximas.length} documento(s) vencen en ${umbralDias} día(s) o menos — ${empresa.nombre}`,
+    asunto: `⏰ ${totalAvisos} aviso(s) de cobro/pago en ${umbralDias} día(s) o menos — ${empresa.nombre}`,
     textoPlano: lineas.join("\n"),
   });
 }

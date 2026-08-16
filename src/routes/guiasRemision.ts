@@ -51,6 +51,7 @@ function construirXmlDeGuiaRemision(g: any): string {
       fechaIniTransporte: g.fechaIniTransporte,
       fechaFinTransporte: g.fechaFinTransporte,
       detalles: g.detalles,
+      factura: { secuencial: g.factura.secuencial, fechaEmision: g.factura.fechaEmision, claveAcceso: g.factura.claveAcceso },
     },
     datosEmisorDeEmpresa(empresaActiva())
   );

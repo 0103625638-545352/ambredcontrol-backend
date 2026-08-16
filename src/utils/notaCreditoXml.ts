@@ -10,6 +10,7 @@
 
 import { create } from "xmlbuilder2";
 import { Prisma } from "@prisma/client";
+import { codigoTipoIdentificacion, codigoPorcentajeIva } from "./codigosSri";
 
 interface DetalleParaXml {
   producto: { codigo: string; nombre: string; ivaPorcentaje: Prisma.Decimal };
@@ -43,20 +44,9 @@ interface DatosEmisor {
   obligadoContabilidad: boolean;
 }
 
-function codigoTipoIdentificacion(tipo: string): string {
-  const mapa: Record<string, string> = { RUC: "04", CEDULA: "05", PASAPORTE: "06", CONSUMIDOR_FINAL: "07" };
-  return mapa[tipo] ?? "05";
-}
-
-function codigoPorcentajeIva(porcentaje: number): string {
-  if (porcentaje === 0) return "0";
-  if (porcentaje === 12) return "2";
-  if (porcentaje === 15) return "4";
-  return "4";
-}
-
 interface GrupoImpuesto {
   codigoPorcentaje: string;
+  tarifa: number; // confirmado contra facturaXml.ts (mismo tipo "totalImpuesto" del esquema SRI): también lleva <tarifa>, no solo <codigoPorcentaje>
   baseImponible: Prisma.Decimal;
   valor: Prisma.Decimal;
 }
@@ -67,9 +57,11 @@ function agruparImpuestosPorTarifa(detalles: DetalleParaXml[]): GrupoImpuesto[] 
   const grupos = new Map<string, GrupoImpuesto>();
 
   for (const item of detalles) {
-    const codigoPorcentaje = codigoPorcentajeIva(item.producto.ivaPorcentaje.toNumber());
+    const tarifa = item.producto.ivaPorcentaje.toNumber();
+    const codigoPorcentaje = codigoPorcentajeIva(tarifa);
     const grupo = grupos.get(codigoPorcentaje) ?? {
       codigoPorcentaje,
+      tarifa,
       baseImponible: new Prisma.Decimal(0),
       valor: new Prisma.Decimal(0),
     };
@@ -128,6 +120,7 @@ export function generarXmlNotaCredito(nc: NotaCreditoParaXml, emisor: DatosEmiso
       .ele("totalImpuesto")
         .ele("codigo").txt("2").up()
         .ele("codigoPorcentaje").txt(grupo.codigoPorcentaje).up()
+        .ele("tarifa").txt(grupo.tarifa.toFixed(2)).up()
         .ele("baseImponible").txt(grupo.baseImponible.toFixed(2)).up()
         .ele("valor").txt(grupo.valor.toFixed(2)).up()
       .up();
@@ -146,8 +139,10 @@ export function generarXmlNotaCredito(nc: NotaCreditoParaXml, emisor: DatosEmiso
       .ele("detalle")
         .ele("codigoInterno").txt(item.producto.codigo).up()
         .ele("descripcion").txt(item.producto.nombre).up()
-        .ele("cantidad").txt(item.cantidad.toString()).up()
-        .ele("precioUnitario").txt(item.precioUnitario.toFixed(2)).up()
+        // Confirmado contra una factura real (mismo campo, mismo esquema
+        // base): 6 decimales, no 2.
+        .ele("cantidad").txt(item.cantidad.toFixed(6)).up()
+        .ele("precioUnitario").txt(item.precioUnitario.toFixed(6)).up()
         .ele("descuento").txt("0.00").up()
         .ele("precioTotalSinImpuesto").txt(item.subtotal.toFixed(2)).up()
         .ele("impuestos")

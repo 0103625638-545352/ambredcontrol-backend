@@ -745,6 +745,7 @@ model Factura {
   detalles          FacturaDetalle[]
   notasCredito      NotaCredito[]
   pagos             Pago[]
+  cuotas            Cuota[] // plan de cuotas del cobro a crédito, ver modelo Cuota
   proformaOrigen    Proforma? // si esta factura nació de convertir una proforma
   retencionRecibida RetencionRecibida? // 1 a 1: retención que un cliente le practicó a ESTA empresa sobre esta factura
   guiasRemision     GuiaRemision[] // puede haber más de una (envío repartido en varios viajes)
@@ -773,6 +774,20 @@ model CuentaBancaria {
   createdAt    DateTime @default(now())
 
   @@unique([banco, numeroCuenta])
+}
+
+// Catálogo de bancos EXTERNOS (Pichincha, Guayaquil, Produbanco, etc.) — de
+// dónde vino/salió el dinero de un pago (Pago.bancoOrigenId: banco de
+// procedencia en TRANSFERENCIA, banco emisor en TARJETA/CHEQUE). NO son las
+// cuentas PROPIAS de la empresa (eso es CuentaBancaria arriba) — existe para
+// que el vendedor elija de una lista en vez de escribir el nombre a mano
+// (evita typos o variantes del mismo banco ensuciando los reportes).
+model Banco {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  pagos     Pago[]
+  createdAt DateTime @default(now())
 }
 
 // Un abono contra una Factura o NotaVenta (cuentas por cobrar) o una Compra
@@ -819,7 +834,81 @@ model Pago {
   // criterio que Producto.imagenUrl: se guarda en disco, acá solo la ruta.
   comprobanteUrl String?
 
+  // Datos de ORIGEN del pago — de dónde vino el dinero (banco/cuenta/tarjeta
+  // de quien pagó), a diferencia de cuentaBancaria arriba (que es la cuenta
+  // PROPIA de la empresa que lo recibió/envió). Todos opcionales y ninguno
+  // se exige en la ruta que crea el Pago — solo tienen sentido según
+  // formaPago (ver ModalRegistrarPago.tsx en el frontend):
+  //   TRANSFERENCIA -> bancoOrigen + numeroCuentaOrigen
+  //   TARJETA       -> bancoOrigen (emisor) + tarjetaUltimosDigitos + tarjetaTipo
+  //                    + tarjetaReferencia + tarjetaLote
+  //   CHEQUE        -> bancoOrigen (emisor) + chequeNumero
+  // bancoOrigen es una relación al catálogo Banco (no texto libre) — ver el
+  // comentario de ese modelo arriba.
+  bancoOrigenId         Int?
+  bancoOrigen           Banco?   @relation(fields: [bancoOrigenId], references: [id])
+  numeroCuentaOrigen    String?
+  tarjetaUltimosDigitos String?
+  tarjetaTipo           String? // "CREDITO" | "DEBITO"
+  // A propósito NUNCA se guarda el número completo de la tarjeta (solo los
+  // últimos 4 dígitos arriba) — es un dato sensible bajo PCI-DSS, no hace
+  // falta más que eso para identificar el cobro contra el comprobante del
+  // datafono. tarjetaReferencia/tarjetaLote sí son datos propios de ESE
+  // comprobante (no del plástico), sin ese riesgo.
+  tarjetaReferencia String? // N° de referencia que imprime el datafono
+  tarjetaLote       String? // N° de lote de la transacción (conciliación con el banco)
+  chequeNumero      String?
+  chequeFechaCobro      DateTime? // CHEQUE: fecha en la que el cheque es cobrable (puede ser posfechado)
+
+  // Si este Pago liquidó una Cuota de un plan a plazos (ver modelo Cuota
+  // abajo), queda enlazado acá — 1 a 1: una cuota se paga con un solo Pago
+  // por el monto EXACTO pactado, nunca varios abonos parciales sobre la
+  // misma cuota.
+  cuotaId Int?   @unique
+  cuota   Cuota? @relation(fields: [cuotaId], references: [id])
+
   createdAt DateTime @default(now())
+}
+
+enum EstadoCuota {
+  PENDIENTE
+  PAGADA
+}
+
+// Plan de cuotas de una venta o compra a crédito (Factura, NotaVenta o
+// Compra) — a diferencia de Pago (dinero YA recibido/entregado, libre en
+// monto/fecha), Cuota es la OBLIGACIÓN pactada al vender/comprar: se elige
+// un número de cuotas al momento del documento (ver PuntoDeVentaPage.tsx
+// para ventas, ComprasPage.tsx para compras), el saldo se reparte en partes
+// iguales entre ellas, y cada una tiene su propia fecha de vencimiento.
+// Se cobran/pagan ESTRICTAMENTE EN ORDEN — no se puede registrar el pago de
+// la cuota 2 sin haber saldado la 1 primero, y el monto del pago debe
+// coincidir EXACTO con el de la cuota (ver registrarPagoDeFactura en
+// routes/facturas.ts y su equivalente en routes/notasVenta.ts/compras.ts).
+// Un documento sin ningún plan de cuotas sigue aceptando abonos libres,
+// igual que siempre — Cuota es opcional, no reemplaza a Pago.
+model Cuota {
+  id               Int         @id @default(autoincrement())
+  numero           Int // 1, 2, 3... orden dentro del plan, se paga en este orden
+  monto            Decimal     @db.Decimal(10, 2)
+  fechaVencimiento DateTime
+  estado           EstadoCuota @default(PENDIENTE)
+
+  facturaId Int?
+  factura   Factura? @relation(fields: [facturaId], references: [id])
+
+  notaVentaId Int?
+  notaVenta   NotaVenta? @relation(fields: [notaVentaId], references: [id])
+
+  compraId Int?
+  compra   Compra? @relation(fields: [compraId], references: [id])
+
+  pago      Pago? // el Pago que la liquidó, una vez PAGADA
+  createdAt DateTime @default(now())
+
+  @@unique([facturaId, numero])
+  @@unique([notaVentaId, numero])
+  @@unique([compraId, numero])
 }
 
 model FacturaDetalle {
@@ -1036,6 +1125,7 @@ model NotaVenta {
 
   detalles       NotaVentaDetalle[]
   pagos          Pago[]
+  cuotas         Cuota[] // plan de cuotas del cobro a crédito, ver modelo Cuota
   proformaOrigen Proforma? // si esta nota de venta nació de convertir una proforma
 
   createdAt DateTime @default(now())
@@ -1087,6 +1177,15 @@ model Compra {
   id            Int      @id @default(autoincrement())
   numeroFactura String // número de factura/comprobante que trae el PROVEEDOR, no lo generamos nosotros
   fechaEmision  DateTime @default(now())
+  // Código de la tabla oficial de "Sustento Tributario" del SRI (ej. "01"
+  // crédito tributario IVA bienes, "06" crédito tributario IVA servicios —
+  // ver Tabla 5 de la Ficha Técnica del comprobante). A PROPÓSITO no hay
+  // catálogo interno de códigos, mismo criterio que
+  // RetencionDetalle.codigoRetencion: el SRI los actualiza periódicamente y
+  // mantenerlos acá sería un riesgo de compliance — se ingresa a mano.
+  // Nullable porque las compras registradas ANTES de este campo no lo
+  // tienen; la ruta que crea una compra nueva sí lo exige (ver compras.ts).
+  sustentoTributario String?
 
   proveedorId Int
   proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
@@ -1121,6 +1220,7 @@ model Compra {
 
   detalles     CompraDetalle[]
   pagos        Pago[]
+  cuotas       Cuota[] // plan de cuotas del pago a plazos, ver modelo Cuota
   retencion    Retencion? // 1 a 1: null si esta compra todavía no tiene retención generada
   devoluciones DevolucionCompra[] // devoluciones parciales — ver modelo abajo
 

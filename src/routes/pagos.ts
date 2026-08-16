@@ -14,6 +14,8 @@ export const pagosRouter = Router();
 
 const INCLUDE_PAGO_BANCARIO = {
   cuentaBancaria: true,
+  bancoOrigen: true,
+  cuota: { select: { numero: true } },
   factura: { select: { secuencial: true, cliente: { select: { razonSocial: true } } } },
   notaVenta: { select: { secuencial: true, cliente: { select: { razonSocial: true } } } },
   compra: { select: { numeroFactura: true, proveedor: { select: { razonSocial: true } } } },

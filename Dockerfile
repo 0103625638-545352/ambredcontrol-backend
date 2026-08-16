@@ -21,4 +21,10 @@ EXPOSE 3000
 # corriendo el servicio "db" de docker-compose) — es idempotente, no rompe
 # nada si ya estaba migrada. Mismo comando que ya usa producción real
 # (ver DESPLIEGUE.md), sin nodemon.
-CMD ["sh", "-c", "npx prisma migrate deploy && npx ts-node src/index.ts"]
+#
+# El .p12 nunca viaja dentro de la imagen (ver .dockerignore) — en proveedores
+# sin subida de binarios (ej. Render "Secret Files", que solo acepta texto) se
+# sube codificado en base64 como "certificado.p12.b64"; si existe, se decodifica
+# a certificado.p12 antes de arrancar. Si no existe (docker-compose local, donde
+# el .p12 se monta directo), este paso simplemente se omite.
+CMD ["sh", "-c", "if [ -f /etc/secrets/certificado.p12.b64 ]; then node -e \"require('fs').writeFileSync('certificado.p12', Buffer.from(require('fs').readFileSync('/etc/secrets/certificado.p12.b64','utf8'),'base64'))\"; fi && npx prisma migrate deploy && npx ts-node src/index.ts"]

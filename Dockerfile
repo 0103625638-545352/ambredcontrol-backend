@@ -27,4 +27,10 @@ EXPOSE 3000
 # sube codificado en base64 como "certificado.p12.b64"; si existe, se decodifica
 # a certificado.p12 antes de arrancar. Si no existe (docker-compose local, donde
 # el .p12 se monta directo), este paso simplemente se omite.
-CMD ["sh", "-c", "if [ -f /etc/secrets/certificado.p12.b64 ]; then node -e \"require('fs').writeFileSync('certificado.p12', Buffer.from(require('fs').readFileSync('/etc/secrets/certificado.p12.b64','utf8'),'base64'))\"; fi && npx prisma migrate deploy && npx ts-node src/index.ts"]
+#
+# "--transpile-only": en instancias con poca RAM (ej. Render free, 512MB),
+# el chequeo de tipos completo de ts-node normal agota la memoria y el
+# proceso muere con "JavaScript heap out of memory" antes de arrancar. Con
+# esta bandera ts-node solo transpila (como Babel), sin chequear tipos en
+# runtime — el chequeo de tipos ya lo hace el editor/CI en desarrollo.
+CMD ["sh", "-c", "if [ -f /etc/secrets/certificado.p12.b64 ]; then node -e \"require('fs').writeFileSync('certificado.p12', Buffer.from(require('fs').readFileSync('/etc/secrets/certificado.p12.b64','utf8'),'base64'))\"; fi && npx prisma migrate deploy && npx ts-node --transpile-only src/index.ts"]

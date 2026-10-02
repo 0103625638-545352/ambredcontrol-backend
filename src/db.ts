@@ -24,6 +24,72 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { PrismaClient } from "@prisma/client";
 import { obtenerEmpresa, type EmpresaConfig } from "./utils/empresas";
+import { CAMPOS_CIFRADOS, cifrar, descifrar, estaCifrado, cifradoActivo, transformarCampos } from "./utils/cifrado";
+
+// Cifra al escribir y descifra al leer las credenciales de los equipos de red
+// (ver utils/cifrado.ts) — en un solo lugar, para que ninguna ruta tenga que
+// acordarse de hacerlo. Solo cubre consultas DIRECTAS a esos modelos
+// (prisma.nodoRed.findUnique, etc.); un include desde otro modelo devuelve
+// el valor cifrado, y por eso todo el código que se conecta a un equipo lo
+// vuelve a leer por su id (ver obtenerConexion en utils/mikrotik.ts).
+function descifrarResultado(resultado: any, campos: string[]): any {
+  if (Array.isArray(resultado)) return resultado.map((r) => descifrarResultado(r, campos));
+  if (!resultado || typeof resultado !== "object") return resultado;
+  for (const campo of campos) {
+    if (campo in resultado) resultado[campo] = descifrar(resultado[campo]);
+  }
+  return resultado;
+}
+
+const extensionCifrado = {
+  name: "cifrado-credenciales-equipos",
+  query: Object.fromEntries(
+    Object.entries(CAMPOS_CIFRADOS).map(([modelo, campos]) => [
+      modelo,
+      {
+        async $allOperations({ args, query }: { args: any; query: (args: any) => Promise<any> }) {
+          const a = { ...args };
+          if (a.data) a.data = transformarCampos(a.data, campos, cifrar);
+          if (a.create) a.create = transformarCampos(a.create, campos, cifrar);
+          if (a.update) a.update = transformarCampos(a.update, campos, cifrar);
+          return descifrarResultado(await query(a), campos);
+        },
+      },
+    ])
+  ),
+};
+
+// Migración única y automática: cifra las credenciales que todavía estén en
+// texto plano (las que existían antes de activar CLAVE_CIFRADO_EQUIPOS). Se
+// llama al arrancar el servidor, por empresa; es idempotente — lo ya cifrado
+// se salta. Usa un cliente SIN la extensión para poder ver el valor crudo.
+export async function cifrarCredencialesExistentes(empresaId: string): Promise<number> {
+  if (!cifradoActivo()) return 0;
+  const empresa = obtenerEmpresa(empresaId);
+  if (!empresa) return 0;
+  const crudo = new PrismaClient({ datasourceUrl: empresa.databaseUrl }) as any;
+  let actualizados = 0;
+  try {
+    for (const [modelo, campos] of Object.entries(CAMPOS_CIFRADOS)) {
+      const select = Object.fromEntries([["id", true], ...campos.map((c) => [c, true])]);
+      const filas: any[] = await crudo[modelo].findMany({ select });
+      for (const fila of filas) {
+        const data: Record<string, string> = {};
+        for (const campo of campos) {
+          const valor = fila[campo];
+          if (typeof valor === "string" && valor !== "" && !estaCifrado(valor)) data[campo] = cifrar(valor) as string;
+        }
+        if (Object.keys(data).length > 0) {
+          await crudo[modelo].update({ where: { id: fila.id }, data });
+          actualizados++;
+        }
+      }
+    }
+  } finally {
+    await crudo.$disconnect();
+  }
+  return actualizados;
+}
 
 interface ContextoEmpresa {
   empresaId: string;
@@ -42,7 +108,10 @@ export function obtenerPrismaDeEmpresa(empresaId: string): PrismaClient {
     throw new Error(`Empresa desconocida o inactiva: "${empresaId}"`);
   }
 
-  cliente = new PrismaClient({ datasourceUrl: empresa.databaseUrl });
+  // El tipo extendido es compatible en tiempo de ejecución con PrismaClient
+  // (mismos modelos y métodos) — se castea para no tener que cambiar el tipo
+  // de "prisma" en los ~60 archivos que lo importan.
+  cliente = new PrismaClient({ datasourceUrl: empresa.databaseUrl }).$extends(extensionCifrado as any) as unknown as PrismaClient;
   clientesPorEmpresa.set(empresaId, cliente);
   return cliente;
 }

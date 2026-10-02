@@ -74,7 +74,9 @@ import { centroControlRouter } from "./routes/centroControl";
 import { ticketsRouter } from "./routes/tickets";
 import { iniciarMonitoreoRed } from "./jobs/monitoreoRed";
 import { iniciarEncuestaVisitas } from "./jobs/encuestaVisitas";
-import { obtenerEmpresa, rutaAbsoluta, sembrarEmpresaPrincipalSiHaceFalta } from "./utils/empresas";
+import { obtenerEmpresa, rutaAbsoluta, sembrarEmpresaPrincipalSiHaceFalta, listarEmpresas } from "./utils/empresas";
+import { cifrarCredencialesExistentes } from "./db";
+import { cifradoActivo } from "./utils/cifrado";
 
 dotenv.config({ quiet: true });
 
@@ -252,6 +254,17 @@ const servidor = usaHttpsLocal
 
 servidor.listen(Number(PORT), () => {
   console.log(`Servidor corriendo en ${usaHttpsLocal ? "https" : "http"}://localhost:${PORT}`);
+  // Cifra las contraseñas de equipos que sigan en texto plano (ver
+  // utils/cifrado.ts) — una sola vez por empresa, lo ya cifrado se salta.
+  if (cifradoActivo()) {
+    for (const empresa of listarEmpresas()) {
+      cifrarCredencialesExistentes(empresa.id)
+        .then((n) => n > 0 && console.log(`[cifrado] "${empresa.nombre}": ${n} equipo(s) con credenciales cifradas.`))
+        .catch((error) => console.error(`[cifrado] No se pudieron cifrar las credenciales de "${empresa.nombre}":`, error.message));
+    }
+  } else {
+    console.warn("[cifrado] CLAVE_CIFRADO_EQUIPOS no está en .env — las contraseñas de Mikrotik/OLT/switches se guardan sin cifrar.");
+  }
   iniciarReintentoAutorizacionSri();
   iniciarResumenDiario();
   iniciarBackupDiario();

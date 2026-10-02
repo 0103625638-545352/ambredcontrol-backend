@@ -38,7 +38,7 @@ export const facturasInternetRouter = Router();
 // consultar la tabla una vez por cliente. Cuál de estas aplica a un cliente
 // puntual lo decide promocionAplicable (utils/promociones.ts), que ya sabe
 // filtrar por plan/antigüedad de contrato.
-async function promocionesVigentesHoy(hoy: Date): Promise<PromocionCandidata[]> {
+export async function promocionesVigentesHoy(hoy: Date): Promise<PromocionCandidata[]> {
   return prisma.promocionPlan.findMany({
     where: { activo: true, fechaInicio: { lte: hoy }, OR: [{ fechaFin: null }, { fechaFin: { gte: hoy } }] },
   });
@@ -47,7 +47,7 @@ async function promocionesVigentesHoy(hoy: Date): Promise<PromocionCandidata[]> 
 // Descuento absoluto (o undefined si no aplica ninguna) para UN cliente con
 // UN plan, a partir de la lista de promociones ya traída — separado para no
 // repetir la cuenta de montoDescuentoPromocion en los 3 lugares que facturan.
-function descuentoParaCliente(
+export function descuentoParaCliente(
   promosVigentes: PromocionCandidata[],
   cliente: { fechaContrato: Date | null },
   plan: { id: number; precio: Prisma.Decimal },

@@ -72,6 +72,7 @@ import { iniciarRecordatorioVencimientoInternet } from "./jobs/recordatorioVenci
 import { whatsappWebhookRouter } from "./routes/whatsappWebhook";
 import { centroControlRouter } from "./routes/centroControl";
 import { ticketsRouter } from "./routes/tickets";
+import { conciliacionBancariaRouter } from "./routes/conciliacionBancaria";
 import { iniciarMonitoreoRed } from "./jobs/monitoreoRed";
 import { iniciarEncuestaVisitas } from "./jobs/encuestaVisitas";
 import { iniciarMonitoreoNodos } from "./jobs/monitoreoNodos";
@@ -234,6 +235,9 @@ app.use("/ubicaciones-tecnicos", requireAuth, ubicacionesTecnicosRouter);
 // utils/permisos.ts.
 app.use("/centro-control", requireAuth, requirePermiso("centro_control"), centroControlRouter);
 app.use("/tickets", requireAuth, requirePermiso("tickets"), ticketsRouter);
+// Conciliación del extracto bancario con los cobros de internet — mismo
+// permiso que Facturación de Internet, que es donde se cobra a mano.
+app.use("/conciliacion-bancaria", requireAuth, requirePermiso("mikrotik"), conciliacionBancariaRouter);
 
 const PORT = process.env.PORT || 3000;
 

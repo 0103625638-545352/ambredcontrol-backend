@@ -11,6 +11,7 @@ import { calcularSla, PRIORIDADES_TICKET } from "../utils/controlInterno";
 import { CANALES_TICKET, CATEGORIAS_TICKET, normalizarTelefonoTicket, alertaCorteDelCliente } from "../utils/tickets";
 import { fechaLocalDeString, aClaveDia } from "../utils/rangoFechas";
 import { enviarTextoWhatsapp } from "../utils/whatsapp";
+import { calcularDistanciaMetros } from "../utils/geocercas";
 
 export const ticketsRouter = Router();
 
@@ -132,6 +133,63 @@ ticketsRouter.get("/tecnicos", async (_req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar los técnicos" });
+  }
+});
+
+// GET /tickets/:id/tecnicos-cercanos
+// Técnicos ordenados por distancia (en línea recta) desde su última ubicación
+// GPS hasta la casa del cliente del ticket, con cuántas visitas les quedan
+// hoy — para decidir a quién mandar sin abrir el mapa. Solo se ordena por
+// distancia a quien reportó ubicación en las últimas 2 horas; el resto va al
+// final como "sin ubicación reciente".
+ticketsRouter.get("/:id/tecnicos-cercanos", async (req: Request, res: Response) => {
+  try {
+    const ticket = await prisma.ticketSoporte.findUnique({
+      where: { id: Number(req.params.id) },
+      select: { cliente: { select: { latitud: true, longitud: true } } },
+    });
+    if (!ticket) return res.status(404).json({ error: "Ticket no encontrado" });
+    const lat = ticket.cliente?.latitud?.toNumber();
+    const lng = ticket.cliente?.longitud?.toNumber();
+
+    const hace2h = new Date(Date.now() - 2 * 3600_000);
+    const hoy = fechaLocalDeString(aClaveDia(new Date()), false);
+    const [empleados, ubicaciones, rutasHoy] = await Promise.all([
+      prisma.empleado.findMany({ where: { activo: true }, select: { id: true, nombres: true, apellidos: true, cargo: true } }),
+      prisma.ubicacionTecnico.findMany({
+        where: { fecha: { gte: hace2h } },
+        orderBy: { fecha: "desc" },
+        distinct: ["empleadoId"],
+        select: { empleadoId: true, latitud: true, longitud: true, fecha: true },
+      }),
+      prisma.rutaVisita.findMany({
+        where: { fecha: hoy },
+        select: { empleadoId: true, visitas: { select: { estado: true } } },
+      }),
+    ]);
+
+    const resultado = empleados.map((e) => {
+      const u = ubicaciones.find((x) => x.empleadoId === e.id);
+      const ruta = rutasHoy.find((r) => r.empleadoId === e.id);
+      return {
+        empleadoId: e.id,
+        nombre: `${e.nombres.trim()} ${e.apellidos.trim()}`,
+        cargo: e.cargo,
+        distanciaMetros: u && lat != null && lng != null ? Math.round(calcularDistanciaMetros(lat, lng, u.latitud.toNumber(), u.longitud.toNumber())) : null,
+        minutosDesdeUbicacion: u ? Math.round((Date.now() - u.fecha.getTime()) / 60_000) : null,
+        visitasPendientesHoy: ruta ? ruta.visitas.filter((v) => v.estado === "PENDIENTE").length : 0,
+      };
+    });
+    resultado.sort((a, b) => {
+      if (a.distanciaMetros == null && b.distanciaMetros == null) return a.visitasPendientesHoy - b.visitasPendientesHoy;
+      if (a.distanciaMetros == null) return 1;
+      if (b.distanciaMetros == null) return -1;
+      return a.distanciaMetros - b.distanciaMetros;
+    });
+    res.json({ clienteConUbicacion: lat != null && lng != null, tecnicos: resultado });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al buscar los técnicos cercanos" });
   }
 });
 

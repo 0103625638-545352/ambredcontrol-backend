@@ -74,14 +74,23 @@ usuariosRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const busqueda = leerTextoBusqueda(req);
     const rango = leerRangoFechas(req);
+    // Filtros opcionales de la pantalla Usuarios: estado (activo/inactivo),
+    // rol y sucursal — sin ellos responde igual que siempre.
+    const { estado, rol, sucursalId } = req.query;
     const where: Prisma.UsuarioWhereInput = {
       ...(busqueda && {
         OR: [
           { nombre: { contains: busqueda, mode: "insensitive" } },
           { usuario: { contains: busqueda, mode: "insensitive" } },
+          { email: { contains: busqueda, mode: "insensitive" } },
         ],
       }),
       ...(rango && { createdAt: rango }),
+      ...(estado === "ACTIVO" && { activo: true }),
+      ...(estado === "INACTIVO" && { activo: false }),
+      ...((rol === "ADMIN" || rol === "CAJERO") && { rol }),
+      ...(sucursalId === "sin" && { sucursalId: null }),
+      ...(typeof sucursalId === "string" && /^\d+$/.test(sucursalId) && { sucursalId: Number(sucursalId) }),
     };
 
     if (!paginacion.aplica) {

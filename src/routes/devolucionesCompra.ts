@@ -10,6 +10,7 @@
 // claveAcceso ni estado (mismo criterio que RetencionRecibida).
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
+import { leerBusqueda, contiene, resumenListado } from "../utils/busquedaListado";
 import { Prisma } from "@prisma/client";
 import { leerPaginacion, respuestaPaginada } from "../utils/paginacion";
 import { leerRangoFechas } from "../utils/rangoFechas";
@@ -33,6 +34,19 @@ devolucionesCompraRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.DevolucionCompraWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador: número, motivo, compra corregida y su proveedor.
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { secuencial: contiene(q) },
+        { motivo: contiene(q) },
+        { compra: { numeroFactura: contiene(q) } },
+        { compra: { proveedor: { razonSocial: contiene(q) } } },
+        { compra: { proveedor: { identificacion: { contains: q } } } },
+      ];
+    }
+
     const opciones = { where, include: INCLUDE_DEVOLUCION, orderBy: { fechaEmision: "desc" as const } };
 
     if (!paginacion.aplica) {
@@ -40,11 +54,12 @@ devolucionesCompraRouter.get("/", async (req: Request, res: Response) => {
       return res.json(devoluciones);
     }
 
-    const [devoluciones, total] = await Promise.all([
+    const [devoluciones, total, suma] = await Promise.all([
       prisma.devolucionCompra.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
       prisma.devolucionCompra.count({ where }),
+      prisma.devolucionCompra.aggregate({ where, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(devoluciones, total, paginacion));
+    res.json({ ...respuestaPaginada(devoluciones, total, paginacion), resumen: resumenListado(suma) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar devoluciones a proveedor" });

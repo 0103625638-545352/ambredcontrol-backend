@@ -9,3 +9,7 @@ backups/
 empresas-registry.json
 data/
 uploads/
+
+# Logs locales de desarrollo (npm run dev > log)
+.dev-backend.log
+*.log

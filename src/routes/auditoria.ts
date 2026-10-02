@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { leerPaginacion, respuestaPaginada } from "../utils/paginacion";
 import { leerRangoFechas } from "../utils/rangoFechas";
+import { leerBusqueda, contiene } from "../utils/busquedaListado";
 
 export const auditoriaRouter = Router();
 
@@ -22,6 +23,18 @@ auditoriaRouter.get("/", async (req: Request, res: Response) => {
       ...(entidad && { entidad: entidad as string }),
       ...(rango && { fecha: rango }),
     };
+
+    // Buscador de la pantalla Auditoría: texto libre contra el detalle (ej.
+    // "Factura 001-001-000000010"), la entidad y el usuario que lo hizo.
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { detalle: contiene(q) },
+        { entidad: contiene(q) },
+        { usuario: { nombre: contiene(q) } },
+        { usuario: { usuario: contiene(q) } },
+      ];
+    }
 
     const opciones = {
       where,

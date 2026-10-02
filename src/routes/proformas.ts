@@ -6,7 +6,9 @@
 // esas rutas ya usan.
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { leerBusqueda, leerEnum, contiene, resumenListado } from "../utils/busquedaListado";
+import { leerRangoFechas } from "../utils/rangoFechas";
+import { Prisma, EstadoProforma } from "@prisma/client";
 import { leerPaginacion, respuestaPaginada } from "../utils/paginacion";
 import { generarRideProformaPdf } from "../utils/generarRideProforma";
 import { generarClaveAcceso } from "../utils/claveAcceso";
@@ -34,7 +36,24 @@ interface CrearProformaBody {
 proformasRouter.get("/", async (req: Request, res: Response) => {
   try {
     const paginacion = leerPaginacion(req);
+    const rango = leerRangoFechas(req);
+    const where: Prisma.ProformaWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador del historial: número, cliente (razón social o cédula/RUC);
+    // filtro por estado (creada/convertida/anulada).
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { secuencial: contiene(q) },
+        { cliente: { razonSocial: contiene(q) } },
+        { cliente: { identificacion: { contains: q } } },
+      ];
+    }
+    const estado = leerEnum(req, "estado", EstadoProforma);
+    if (estado) where.estado = estado;
+
     const opciones = {
+      where,
       include: {
         cliente: true,
         facturaConvertida: { select: { secuencial: true } },
@@ -48,11 +67,12 @@ proformasRouter.get("/", async (req: Request, res: Response) => {
       return res.json(proformas);
     }
 
-    const [proformas, total] = await Promise.all([
+    const [proformas, total, suma] = await Promise.all([
       prisma.proforma.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
-      prisma.proforma.count(),
+      prisma.proforma.count({ where }),
+      prisma.proforma.aggregate({ where: { AND: [where, { estado: { not: EstadoProforma.ANULADA } }] }, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(proformas, total, paginacion));
+    res.json({ ...respuestaPaginada(proformas, total, paginacion), resumen: resumenListado(suma) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar proformas" });

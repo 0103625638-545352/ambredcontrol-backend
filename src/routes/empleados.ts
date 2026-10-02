@@ -67,8 +67,14 @@ empleadosRouter.get("/", puedeVer, async (req: Request, res: Response) => {
           { cedula: { contains: busqueda, mode: "insensitive" } },
           { nombres: { contains: busqueda, mode: "insensitive" } },
           { apellidos: { contains: busqueda, mode: "insensitive" } },
+          { cargo: { contains: busqueda, mode: "insensitive" } },
         ],
       }),
+      // Filtros opcionales de la pantalla Empleados (sin ellos, igual que antes).
+      ...(req.query.estado === "ACTIVO" && { activo: true }),
+      ...(req.query.estado === "INACTIVO" && { activo: false }),
+      ...(req.query.sucursalId === "sin" && { sucursalId: null }),
+      ...(typeof req.query.sucursalId === "string" && /^[0-9]+$/.test(req.query.sucursalId) && { sucursalId: Number(req.query.sucursalId) }),
     };
     const opciones = { where, select: SELECT_EMPLEADO, orderBy: { apellidos: "asc" as const } };
 

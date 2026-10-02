@@ -9,7 +9,8 @@
 // con su propia guía.
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { leerBusqueda, leerEnum, contiene } from "../utils/busquedaListado";
+import { Prisma, EstadoFactura } from "@prisma/client";
 import { datosEmisorDeEmpresa, rutaAbsoluta } from "../utils/empresas";
 import { obtenerUrlsSri } from "../utils/sriEndpoints";
 import { generarClaveAcceso } from "../utils/claveAcceso";
@@ -85,6 +86,25 @@ guiasRemisionRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.GuiaRemisionWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador: número, clave de acceso, factura, destinatario, transportista
+    // (nombre o identificación) o placa; filtro por estado SRI.
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { secuencial: contiene(q) },
+        { claveAcceso: { contains: q } },
+        { factura: { secuencial: contiene(q) } },
+        { destinatarioRazonSocial: contiene(q) },
+        { destinatarioIdentificacion: { contains: q } },
+        { transportistaRazonSocial: contiene(q) },
+        { transportistaIdentificacion: { contains: q } },
+        { placa: contiene(q) },
+      ];
+    }
+    const estado = leerEnum(req, "estado", EstadoFactura);
+    if (estado) where.estado = estado;
+
     const opciones = { where, include: INCLUDE_GUIA_REMISION, orderBy: { fechaEmision: "desc" as const } };
 
     if (!paginacion.aplica) {

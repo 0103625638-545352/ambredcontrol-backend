@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { Prisma, EstadoNotaVenta, EstadoPago } from "@prisma/client";
 import { generarReciboNotaVentaPdf } from "../utils/generarReciboNotaVenta";
 import { generarReciboTermicoPdf } from "../utils/generarReciboTermico";
 import { requirePermiso } from "../middleware/auth";
@@ -49,6 +49,32 @@ notasVentaRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.NotaVentaWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador de la pantalla "Notas de venta" — mismo criterio que
+    // GET /facturas: texto libre contra número y cliente (razón social o
+    // cédula/RUC), más filtros opcionales por estado, estado de pago y si
+    // la nota desglosa IVA. Del lado del servidor para que funcione con la
+    // paginación.
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (q) {
+      where.OR = [
+        { secuencial: { contains: q, mode: "insensitive" } },
+        { cliente: { razonSocial: { contains: q, mode: "insensitive" } } },
+        { cliente: { identificacion: { contains: q } } },
+      ];
+    }
+    const estado = req.query.estado;
+    if (typeof estado === "string" && (Object.values(EstadoNotaVenta) as string[]).includes(estado)) {
+      where.estado = estado as EstadoNotaVenta;
+    }
+    const estadoPago = req.query.estadoPago;
+    if (typeof estadoPago === "string" && (Object.values(EstadoPago) as string[]).includes(estadoPago)) {
+      where.estadoPago = estadoPago as EstadoPago;
+    }
+    if (req.query.aplicaIva === "true" || req.query.aplicaIva === "false") {
+      where.aplicaIva = req.query.aplicaIva === "true";
+    }
+
     const opciones = {
       where,
       include: { cliente: true },
@@ -60,11 +86,17 @@ notasVentaRouter.get("/", async (req: Request, res: Response) => {
       return res.json(notasVenta);
     }
 
-    const [notasVenta, total] = await Promise.all([
+    // "resumen": suma de lo que devuelve el filtro actual (sin anuladas, que
+    // no cuentan como venta) — para el pie del listado.
+    const [notasVenta, total, suma] = await Promise.all([
       prisma.notaVenta.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
       prisma.notaVenta.count({ where }),
+      prisma.notaVenta.aggregate({ where: { AND: [where, { estado: { not: EstadoNotaVenta.ANULADA } }] }, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(notasVenta, total, paginacion));
+    res.json({
+      ...respuestaPaginada(notasVenta, total, paginacion),
+      resumen: { cantidadVigentes: suma._count, totalVigentes: suma._sum.total ?? new Prisma.Decimal(0) },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar notas de venta" });
@@ -542,6 +574,12 @@ notasVentaRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (
     }
 
     const notaVentaAnulada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Guardia atómica PRIMERO, antes de tocar stock — mismo motivo que en
+      // PATCH /facturas/:id/anular: sin esto, un doble clic devolvería el
+      // stock de esta nota de venta dos veces.
+      const guardia = await tx.notaVenta.updateMany({ where: { id, estado: { not: "ANULADA" } }, data: { estado: "ANULADA" } });
+      if (guardia.count === 0) throw new Error("NOTA_VENTA_YA_ANULADA");
+
       for (const detalle of notaVenta.detalles) {
         await tx.producto.update({
           where: { id: detalle.productoId },
@@ -569,8 +607,6 @@ notasVentaRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (
         });
       }
 
-      const anulada = await tx.notaVenta.update({ where: { id }, data: { estado: "ANULADA" } });
-
       await revertirAsientoDeOrigen(tx, "NOTA_VENTA", id, req.usuario!.usuarioId);
 
       await registrarAuditoria(tx, {
@@ -581,11 +617,14 @@ notasVentaRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (
         detalle: `Nota de venta ${notaVenta.secuencial}`,
       });
 
-      return anulada;
+      return tx.notaVenta.findUniqueOrThrow({ where: { id } });
     });
 
     res.json({ mensaje: "Nota de venta anulada y stock devuelto", notaVenta: notaVentaAnulada });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "NOTA_VENTA_YA_ANULADA") {
+      return res.status(409).json({ error: "Esta nota de venta ya está anulada (alguien más la anuló mientras tanto)" });
+    }
     console.error(error);
     res.status(500).json({ error: "Error al anular la nota de venta" });
   }

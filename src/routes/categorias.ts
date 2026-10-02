@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../db";
 import { requirePermiso } from "../middleware/auth";
 import { registrarAuditoria } from "../utils/auditoria";
+import { leerBusqueda, contiene } from "../utils/busquedaListado";
 import { leerRangoFechas } from "../utils/rangoFechas";
 
 export const categoriasRouter = Router();
@@ -14,8 +15,20 @@ export const categoriasRouter = Router();
 categoriasRouter.get("/", async (req: Request, res: Response) => {
   try {
     const rango = leerRangoFechas(req);
+    // Buscador de la pantalla Categorías: nombre (texto libre) y si tiene o
+    // no productos asignados. Sin parámetros responde igual que siempre (lo
+    // usan los selectores de categoría de Productos).
+    const q = leerBusqueda(req);
+    const productos = req.query.productos;
     const categorias = await prisma.categoria.findMany({
-      where: { activo: true, ...(rango && { createdAt: rango }) },
+      where: {
+        activo: true,
+        ...(rango && { createdAt: rango }),
+        ...(q && { nombre: contiene(q) }),
+        ...(productos === "con" && { productos: { some: {} } }),
+        ...(productos === "sin" && { productos: { none: {} } }),
+      },
+      include: { _count: { select: { productos: true } } },
       orderBy: { nombre: "asc" },
     });
     res.json(categorias);

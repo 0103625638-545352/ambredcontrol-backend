@@ -8,8 +8,13 @@ import { registrarAuditoria } from "../utils/auditoria";
 import { leerRangoFechas, fechaLocalDeString } from "../utils/rangoFechas";
 import { emailValido } from "../utils/validarEmail";
 import { sincronizarListaPlanCliente, quitarDeListaPlan, limpiarClienteDeNodo, reactivarClientePorIp } from "../utils/mikrotik";
+import { registrarEventoServicioInternet } from "../utils/gestionServicioInternet";
 import { SELECT_EMPLEADO_SEGURO } from "../utils/empleados";
 import { requirePermiso } from "../middleware/auth";
+import { calcularVigenciaContrato, OPCIONES_VIGENCIA_MESES } from "../utils/vigenciaContrato";
+import { obtenerProductoMultaConMonto } from "../utils/multaContrato";
+import { sucursalDelUsuarioActual } from "../utils/sucursales";
+import { crearFacturaConItems, enviarFacturaAlSri, responderErrorCrearFactura } from "./facturas";
 
 export const clientesRouter = Router();
 
@@ -48,6 +53,29 @@ function direccionIpValida(ip: string): boolean {
   const partes = ip.trim().split(".");
   if (partes.length !== 4) return false;
   return partes.every((p) => /^\d{1,3}$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+}
+
+// Solo se aceptan los 4 plazos del select (6 meses, 1, 2 o 3 años) — no
+// cualquier número de meses.
+function vigenciaContratoMesesValida(valor: number): boolean {
+  return (OPCIONES_VIGENCIA_MESES as readonly number[]).includes(valor);
+}
+
+// Agrega el cálculo de vigencia (si el cliente ya cumplió el plazo mínimo
+// pactado, o cuántos días le faltan) a la respuesta de un cliente — null si
+// no tiene fechaInicioServicio/vigenciaContratoMeses cargados. Compara
+// contra fechaBaja si ya se dio de baja, o contra "ahora" si sigue activo
+// (para poder previsualizar "si se da de baja hoy, ¿procede multa?").
+function conVigencia<T extends { fechaInicioServicio: Date | null; vigenciaContratoMeses: number | null; fechaBaja: Date | null }>(
+  cliente: T
+): T & { vigencia: ReturnType<typeof calcularVigenciaContrato> | null } {
+  if (!cliente.fechaInicioServicio || !cliente.vigenciaContratoMeses) {
+    return { ...cliente, vigencia: null };
+  }
+  return {
+    ...cliente,
+    vigencia: calcularVigenciaContrato(cliente.fechaInicioServicio, cliente.vigenciaContratoMeses, cliente.fechaBaja ?? new Date()),
+  };
 }
 
 // Rango válido de latitud/longitud nada más — el frontend ya extrajo los
@@ -128,6 +156,9 @@ async function limpiarNodoAnteriorSiCambio(
 // "?q=" busca por identificación o razón social, sin importar mayúsculas/minúsculas.
 // "?nodoId=" / "?vlanNodoId=" filtran por nodo de red / VLAN específica dentro
 // de ese nodo (para la vista de clientes agrupados por VLAN en Nodos de Red).
+// "?activo=true|false" filtra por estado (dado de baja o no) — sin mandarlo,
+// trae ambos, igual que siempre (ningún llamador existente debe verse
+// afectado por agregar este filtro).
 clientesRouter.get("/", async (req: Request, res: Response) => {
   try {
     const paginacion = leerPaginacion(req);
@@ -135,6 +166,7 @@ clientesRouter.get("/", async (req: Request, res: Response) => {
     const rango = leerRangoFechas(req);
     const nodoId = req.query.nodoId ? Number(req.query.nodoId) : undefined;
     const vlanNodoId = req.query.vlanNodoId ? Number(req.query.vlanNodoId) : undefined;
+    const activo = req.query.activo === "true" ? true : req.query.activo === "false" ? false : undefined;
     const where: Prisma.ClienteWhereInput = {
       ...(busqueda && {
         OR: [
@@ -145,11 +177,12 @@ clientesRouter.get("/", async (req: Request, res: Response) => {
       ...(rango && { createdAt: rango }),
       ...(nodoId && { nodoId }),
       ...(vlanNodoId && { vlanNodoId }),
+      ...(activo !== undefined && { activo }),
     };
 
     if (!paginacion.aplica) {
       const clientes = await prisma.cliente.findMany({ where, include: { tipoPrecio: true, planInternet: true, nodo: { select: { id: true, nombre: true, descripcion: true, mikrotikHost: true, rangoIpInicio: true, rangoIpFin: true, activo: true } }, vlanNodo: true }, orderBy: { razonSocial: "asc" } });
-      return res.json(clientes);
+      return res.json(clientes.map(conVigencia));
     }
 
     const [clientes, total] = await Promise.all([
@@ -162,7 +195,7 @@ clientesRouter.get("/", async (req: Request, res: Response) => {
       }),
       prisma.cliente.count({ where }),
     ]);
-    res.json(respuestaPaginada(clientes, total, paginacion));
+    res.json(respuestaPaginada(clientes.map(conVigencia), total, paginacion));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar clientes" });
@@ -252,10 +285,13 @@ clientesRouter.get("/:id/historial-visitas", async (req: Request, res: Response)
 // Body: { tipoIdentificacion?, identificacion, razonSocial, direccion?, ciudad?, email?, telefono?, tipoPrecioId }
 clientesRouter.post("/", async (req: Request, res: Response) => {
   try {
-    const { tipoIdentificacion, identificacion, razonSocial, direccion, ciudad, email, telefono, tipoPrecioId, direccionIp, planInternetId, nodoId, vlanNodoId, latitud, longitud, fechaContrato } = req.body;
+    const { tipoIdentificacion, identificacion, razonSocial, direccion, ciudad, email, telefono, tipoPrecioId, direccionIp, planInternetId, nodoId, vlanNodoId, latitud, longitud, fechaContrato, fechaInicioServicio, vigenciaContratoMeses } = req.body;
 
     if (!identificacion || !razonSocial || tipoPrecioId === undefined) {
       return res.status(400).json({ error: "identificacion, razonSocial y tipoPrecioId son obligatorios" });
+    }
+    if (vigenciaContratoMeses !== undefined && vigenciaContratoMeses !== null && vigenciaContratoMeses !== "" && !vigenciaContratoMesesValida(Number(vigenciaContratoMeses))) {
+      return res.status(400).json({ error: "vigenciaContratoMeses debe ser 6, 12, 24 o 36" });
     }
 
     const tipo = tipoIdentificacion ?? "CEDULA";
@@ -322,13 +358,17 @@ clientesRouter.post("/", async (req: Request, res: Response) => {
         // utils/rangoFechas.ts). El día del mes de este campo ES el dato —
         // correrse un día lo arruina.
         fechaContrato: fechaContrato ? fechaLocalDeString(fechaContrato, false) : null,
+        // Mismo criterio que fechaContrato — fechaLocalDeString, nunca "new
+        // Date(...)" a secas, para no correrse un día en un servidor UTC-5.
+        fechaInicioServicio: fechaInicioServicio ? fechaLocalDeString(fechaInicioServicio, false) : null,
+        vigenciaContratoMeses: vigenciaContratoMeses ? Number(vigenciaContratoMeses) : null,
       },
       include: { tipoPrecio: true, planInternet: true, nodo: { select: { id: true, nombre: true, descripcion: true, mikrotikHost: true, rangoIpInicio: true, rangoIpFin: true, activo: true } }, vlanNodo: true },
     });
 
     const advertenciaMikrotik = await sincronizarClienteMikrotik(cliente.nodoId, cliente.direccionIp, planInternet, cliente.razonSocial);
 
-    res.status(201).json({ ...cliente, advertenciaMikrotik });
+    res.status(201).json({ ...conVigencia(cliente), advertenciaMikrotik });
   } catch (error: any) {
     if (error.code === "P2002") {
       const campo = error.meta?.target?.includes?.("direccionIp") ? "direccionIp" : "identificacion";
@@ -351,10 +391,13 @@ clientesRouter.post("/", async (req: Request, res: Response) => {
 clientesRouter.put("/:id", requirePermiso("clientes"), async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { razonSocial, direccion, ciudad, email, telefono, tipoPrecioId, direccionIp, planInternetId, nodoId, vlanNodoId, latitud, longitud, fechaContrato } = req.body;
+    const { razonSocial, direccion, ciudad, email, telefono, tipoPrecioId, direccionIp, planInternetId, nodoId, vlanNodoId, latitud, longitud, fechaContrato, fechaInicioServicio, vigenciaContratoMeses } = req.body;
 
     if (!razonSocial || tipoPrecioId === undefined) {
       return res.status(400).json({ error: "razonSocial y tipoPrecioId son obligatorios" });
+    }
+    if (vigenciaContratoMeses !== undefined && vigenciaContratoMeses !== null && vigenciaContratoMeses !== "" && !vigenciaContratoMesesValida(Number(vigenciaContratoMeses))) {
+      return res.status(400).json({ error: "vigenciaContratoMeses debe ser 6, 12, 24 o 36" });
     }
     if (email && !emailValido(email)) {
       return res.status(400).json({ error: "El correo electrónico no es válido" });
@@ -415,6 +458,8 @@ clientesRouter.put("/:id", requirePermiso("clientes"), async (req: Request, res:
         // utils/rangoFechas.ts). El día del mes de este campo ES el dato —
         // correrse un día lo arruina.
         fechaContrato: fechaContrato ? fechaLocalDeString(fechaContrato, false) : null,
+        fechaInicioServicio: fechaInicioServicio ? fechaLocalDeString(fechaInicioServicio, false) : null,
+        vigenciaContratoMeses: vigenciaContratoMeses ? Number(vigenciaContratoMeses) : null,
       },
       include: { tipoPrecio: true, planInternet: true, nodo: { select: { id: true, nombre: true, descripcion: true, mikrotikHost: true, rangoIpInicio: true, rangoIpFin: true, activo: true } }, vlanNodo: true },
     });
@@ -436,7 +481,7 @@ clientesRouter.put("/:id", requirePermiso("clientes"), async (req: Request, res:
       detalle: `${cliente.razonSocial} (${cliente.identificacion})`,
     });
 
-    res.json({ ...cliente, advertenciaMikrotik });
+    res.json({ ...conVigencia(cliente), advertenciaMikrotik });
   } catch (error: any) {
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Cliente no encontrado" });
@@ -484,7 +529,8 @@ clientesRouter.patch("/:id/prorroga", requirePermiso("clientes"), async (req: Re
 
     let advertenciaMikrotik: string | null = null;
     try {
-      await reactivarClientePorIp(cliente.nodoId, cliente.direccionIp);
+      const cambio = await reactivarClientePorIp(cliente.nodoId, cliente.direccionIp);
+      if (cambio) await registrarEventoServicioInternet(cliente.id, "REACTIVADO", "MANUAL");
     } catch (error: any) {
       advertenciaMikrotik = `Se guardó la prórroga, pero no se pudo reactivar en el Mikrotik: ${error?.message || "error desconocido"}. Revisa manualmente.`;
     }
@@ -501,5 +547,123 @@ clientesRouter.patch("/:id/prorroga", requirePermiso("clientes"), async (req: Re
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: "Error al otorgar la prórroga" });
+  }
+});
+
+// PATCH /clientes/:id/dar-de-baja
+// Retira definitivamente al cliente del servicio — distinto de "Suspender"
+// (Mikrotik, reversible por falta de pago): esto es el fin del contrato.
+// Guarda fechaBaja/motivoBaja, marca activo=false y, si tenía nodo/IP, lo
+// saca best-effort de la lista de su plan en el Mikrotik (mismo criterio que
+// el resto de sincronizaciones de este archivo: si el router no responde,
+// igual queda guardada la baja). La respuesta incluye "vigencia" (ver
+// utils/vigenciaContrato.ts) para que la pantalla pueda indicar si el
+// cliente cumplió el plazo mínimo pactado o si procede una multa por
+// abandono/término injustificado — el sistema NO calcula el monto, eso lo
+// decide el admin caso por caso (ej. cobro de equipos no devueltos).
+// Body: { fechaBaja: "YYYY-MM-DD", motivo?: string }
+clientesRouter.patch("/:id/dar-de-baja", requirePermiso("clientes"), async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { fechaBaja, motivo } = req.body;
+    if (!fechaBaja) {
+      return res.status(400).json({ error: "fechaBaja es obligatoria" });
+    }
+
+    const cliente = await prisma.cliente.findUnique({ where: { id } });
+    if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
+    if (!cliente.activo) return res.status(400).json({ error: "Este cliente ya está dado de baja" });
+
+    const fechaBajaDate = fechaLocalDeString(fechaBaja, false);
+
+    const actualizado = await prisma.cliente.update({
+      where: { id },
+      data: { activo: false, fechaBaja: fechaBajaDate, motivoBaja: motivo || null },
+    });
+
+    let advertenciaMikrotik: string | null = null;
+    if (cliente.nodoId && cliente.direccionIp) {
+      try {
+        await quitarDeListaPlan(cliente.nodoId, cliente.direccionIp);
+      } catch (error: any) {
+        advertenciaMikrotik = `Se guardó la baja, pero no se pudo quitar la IP del Mikrotik: ${error?.message || "error desconocido"}. Revisa manualmente.`;
+      }
+    }
+
+    await registrarAuditoria(prisma, {
+      usuarioId: req.usuario!.usuarioId,
+      accion: "DAR_DE_BAJA_CLIENTE",
+      entidad: "Cliente",
+      entidadId: cliente.id,
+      detalle: `${cliente.razonSocial} (${cliente.identificacion}) — baja ${fechaBajaDate.toLocaleDateString("es-EC")}${motivo ? `: ${motivo}` : ""}`,
+    });
+
+    res.json({ ...conVigencia(actualizado), advertenciaMikrotik });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: "Error al dar de baja al cliente" });
+  }
+});
+
+// POST /clientes/:id/imponer-multa
+// Cobra la multa por incumplimiento de vigencia contractual generando una
+// Factura real (firmada y enviada al SRI, igual que cualquier venta) — el
+// sistema nunca calcula el monto solo, lo decide el admin caso por caso
+// (ver "vigencia" en las respuestas de este archivo, calculado por
+// utils/vigenciaContrato.ts); tampoco exige que el cliente ya esté dado de
+// baja, por si se cobra antes de formalizarla. Mismo patrón que
+// routes/facturasInternet.ts: un solo ítem de servicio, reusando TODO el
+// motor legal de routes/facturas.ts (secuencial, clave de acceso, envío al
+// SRI) sobre el Producto "espejo" de utils/multaContrato.ts, cuyo
+// precioFijo se reescribe con el monto de ESTA multa justo antes de
+// facturar. Body: { monto: number, motivo?: string }
+clientesRouter.post("/:id/imponer-multa", requirePermiso("clientes"), async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const monto = Number(req.body?.monto);
+    const motivo = req.body?.motivo as string | undefined;
+
+    if (!Number.isFinite(monto) || monto <= 0) {
+      return res.status(400).json({ error: "monto debe ser un número mayor a 0" });
+    }
+
+    const cliente = await prisma.cliente.findUnique({ where: { id } });
+    if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
+
+    // La bodega no tiene ningún efecto real acá (esServicio=true nunca
+    // descuenta stock, ver crearFacturaConItems) — se completa sola con la
+    // primera bodega activa de la sucursal de quien factura, igual criterio
+    // que facturas-internet.
+    const sucursal = await sucursalDelUsuarioActual(req.usuario!.usuarioId);
+    const bodega = await prisma.bodega.findFirst({ where: { sucursalId: sucursal.id, activa: true }, orderBy: { id: "asc" } });
+    if (!bodega) {
+      return res.status(400).json({ error: "Tu sucursal no tiene ninguna bodega activa — crea al menos una para poder facturar" });
+    }
+
+    const productoId = await prisma.$transaction((tx) => obtenerProductoMultaConMonto(tx, monto));
+
+    const factura = await crearFacturaConItems(req.usuario!.usuarioId, {
+      clienteId: id,
+      bodegaId: bodega.id,
+      items: [{ productoId, cantidad: 1 }],
+    });
+
+    await registrarAuditoria(prisma, {
+      usuarioId: req.usuario!.usuarioId,
+      accion: "IMPONER_MULTA_CLIENTE",
+      entidad: "Cliente",
+      entidadId: cliente.id,
+      detalle: `${cliente.razonSocial} (${cliente.identificacion}) — multa $${monto.toFixed(2)} (factura ${factura.secuencial})${motivo ? `: ${motivo}` : ""}`,
+    });
+
+    res.status(201).json(factura);
+
+    // Mismo criterio que POST /facturas y facturas-internet: el envío al
+    // SRI va en segundo plano, sin hacer esperar al admin.
+    enviarFacturaAlSri(factura.id).catch((error: any) => {
+      console.error(`[auto-envio-sri] Factura de multa ${factura.secuencial} quedó CREADA sin poder enviarse: ${error.message}`);
+    });
+  } catch (error: any) {
+    responderErrorCrearFactura(error, res);
   }
 });

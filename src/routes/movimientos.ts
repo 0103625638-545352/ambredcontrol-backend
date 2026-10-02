@@ -69,6 +69,20 @@ movimientosRouter.post("/", requirePermiso("inventario"), async (req: Request, r
     // si cualquiera falla, TODAS se revierten (rollback). O pasan las dos, o no pasa ninguna.
 
     const resultado = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Bloquea la fila del producto para el resto de esta transacción. Sin
+      // esto, dos movimientos concurrentes del MISMO producto podrían leer
+      // el mismo stock "viejo" (stockActual / StockBodega.cantidad) antes de
+      // que cualquiera confirme, y la segunda escritura pisaría (perdería)
+      // el efecto de la primera — acá abajo el nuevo stock se calcula en JS
+      // a partir de esta lectura, no con un increment/decrement atómico como
+      // en compras/facturas/notasVenta/notasCredito/traslados. El lock solo
+      // serializa los movimientos de ESTE producto entre sí; movimientos de
+      // otros productos no se bloquean entre ellos.
+      const filaBloqueada = await tx.$queryRaw<{ id: number }[]>`SELECT id FROM "Producto" WHERE id = ${productoId} FOR UPDATE`;
+      if (filaBloqueada.length === 0) {
+        throw new Error("PRODUCTO_NO_ENCONTRADO");
+      }
+
       const producto = await tx.producto.findUnique({ where: { id: productoId } });
 
       if (!producto) {

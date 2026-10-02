@@ -52,12 +52,25 @@ function diaLimitePago(cliente: AncoraCiclo): number {
   return cicloCorteInternet(empresaActiva()).fin;
 }
 
+// La fecha (no solo el día del mes) del límite de pago EN EL MES EN CURSO —
+// el mismo valor contra el que se compara "new Date().getDate() >
+// diaLimitePago(cliente)" más abajo para decidir la suspensión, pero como
+// Date completo para poder restarle la fecha de hoy (ver
+// utils/vencimientos.ts) y saber cuántos días faltan. Usada por el
+// recordatorio de vencimiento (jobs/recordatorioVencimientoInternet.ts) —
+// nunca por la suspensión misma, que sigue comparando el número de día
+// directamente.
+export function fechaLimitePago(cliente: AncoraCiclo): Date {
+  const hoy = new Date();
+  return diaDelMesConTope(hoy.getFullYear(), hoy.getMonth(), diaLimitePago(cliente));
+}
+
 // Ventana [inicio, fin) del ciclo de pago EN CURSO para este cliente. Con
 // fechaContrato: ancla en su día del mes — si hoy ya pasó ese día este mes,
 // el ciclo abrió este mes ese día; si no, abrió el mes anterior ese día. Sin
 // fechaContrato: el ciclo es el mes calendario completo (comportamiento de
 // siempre).
-function ventanaCicloActual(cliente: AncoraCiclo): { inicio: Date; fin: Date } {
+export function ventanaCicloActual(cliente: AncoraCiclo): { inicio: Date; fin: Date } {
   const hoy = new Date();
 
   if (cliente.fechaContrato) {
@@ -80,7 +93,7 @@ function ventanaCicloActual(cliente: AncoraCiclo): { inicio: Date; fin: Date } {
 // oportunidad real de facturación/pago (el admin recién lo está instalando).
 // Con fechaContrato: hasta que pase un ciclo completo desde esa fecha. Sin
 // ella: mismo criterio de siempre (creado este mes calendario).
-function enPrimerCiclo(cliente: AncoraCiclo & { createdAt: Date }): boolean {
+export function enPrimerCiclo(cliente: AncoraCiclo & { createdAt: Date }): boolean {
   const hoy = new Date();
   if (cliente.fechaContrato) {
     const finPrimerCiclo = diaDelMesConTope(
@@ -104,7 +117,7 @@ function enPrimerCiclo(cliente: AncoraCiclo & { createdAt: Date }): boolean {
 //      POST /facturas-internet/:clienteId/pago) — el servicio se reactiva
 //      con el cobro, sin esperar a que alguien pase por "Facturar a todos
 //      los pagados" unos días después.
-async function pagoDeEsteCiclo(clienteId: number, productoId: number, cliente: AncoraCiclo): Promise<boolean> {
+export async function pagoDeEsteCiclo(clienteId: number, productoId: number, cliente: AncoraCiclo): Promise<boolean> {
   const { inicio, fin } = ventanaCicloActual(cliente);
 
   const facturaPagada = await prisma.factura.findFirst({
@@ -123,6 +136,17 @@ async function pagoDeEsteCiclo(clienteId: number, productoId: number, cliente: A
     select: { id: true },
   });
   return cobroAdelantado !== null;
+}
+
+// Historial de suspensiones/reactivaciones (ver EventoServicioInternet en
+// schema.prisma) — best-effort: si falla el registro, nunca debe deshacer ni
+// bloquear el cambio que ya se hizo en el router.
+export async function registrarEventoServicioInternet(clienteId: number, tipo: "SUSPENDIDO" | "REACTIVADO", origen: "AUTOMATICO" | "MANUAL"): Promise<void> {
+  try {
+    await prisma.eventoServicioInternet.create({ data: { clienteId, tipo, origen } });
+  } catch (error: any) {
+    console.error(`[servicio-internet] No se pudo registrar el evento ${tipo} del cliente ${clienteId}:`, error.message);
+  }
 }
 
 export type AccionReconciliacion = "REACTIVADO" | "SUSPENDIDO" | "SIN_CAMBIOS" | "NO_APLICA";
@@ -163,7 +187,8 @@ export async function reconciliarClienteInternet(cliente: ClienteParaReconciliar
       if (cliente.prorrogaHasta) {
         await prisma.cliente.update({ where: { id: cliente.id }, data: { prorrogaHasta: null } });
       }
-      await reactivarClientePorIp(cliente.nodoId, cliente.direccionIp);
+      const cambio = await reactivarClientePorIp(cliente.nodoId, cliente.direccionIp);
+      if (cambio) await registrarEventoServicioInternet(cliente.id, "REACTIVADO", "AUTOMATICO");
       return { accion: "REACTIVADO" };
     }
 
@@ -173,7 +198,8 @@ export async function reconciliarClienteInternet(cliente: ClienteParaReconciliar
 
     const enProrroga = cliente.prorrogaHasta && cliente.prorrogaHasta >= new Date();
     if (!enProrroga && new Date().getDate() > diaLimitePago(cliente)) {
-      await suspenderClientePorIp(cliente.nodoId, cliente.direccionIp, `Suspensión automática por falta de pago — ${cliente.razonSocial}`);
+      const cambio = await suspenderClientePorIp(cliente.nodoId, cliente.direccionIp, `Suspensión automática por falta de pago — ${cliente.razonSocial}`);
+      if (cambio) await registrarEventoServicioInternet(cliente.id, "SUSPENDIDO", "AUTOMATICO");
       return { accion: "SUSPENDIDO" };
     }
 

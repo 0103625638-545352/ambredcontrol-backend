@@ -4,7 +4,8 @@
 // solo guardamos el número de documento tal cual viene del proveedor.
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { leerBusqueda, leerEnum, contiene, resumenListado } from "../utils/busquedaListado";
+import { Prisma, EstadoCompra, EstadoPago } from "@prisma/client";
 import { leerPaginacion, respuestaPaginada } from "../utils/paginacion";
 import { generarReciboCompraPdf } from "../utils/generarReciboCompra";
 import { calcularEstadoPago } from "../utils/estadoPago";
@@ -52,6 +53,23 @@ comprasRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.CompraWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador del historial: n° de factura del proveedor, proveedor (razón
+    // social o RUC) o sustento tributario; filtros por estado y estado de pago.
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { numeroFactura: contiene(q) },
+        { sustentoTributario: contiene(q) },
+        { proveedor: { razonSocial: contiene(q) } },
+        { proveedor: { identificacion: { contains: q } } },
+      ];
+    }
+    const estado = leerEnum(req, "estado", EstadoCompra);
+    if (estado) where.estado = estado;
+    const estadoPago = leerEnum(req, "estadoPago", EstadoPago);
+    if (estadoPago) where.estadoPago = estadoPago;
+
     const opciones = {
       where,
       include: {
@@ -66,11 +84,12 @@ comprasRouter.get("/", async (req: Request, res: Response) => {
       return res.json(compras);
     }
 
-    const [compras, total] = await Promise.all([
+    const [compras, total, suma] = await Promise.all([
       prisma.compra.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
       prisma.compra.count({ where }),
+      prisma.compra.aggregate({ where: { AND: [where, { estado: { not: EstadoCompra.ANULADA } }] }, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(compras, total, paginacion));
+    res.json({ ...respuestaPaginada(compras, total, paginacion), resumen: resumenListado(suma) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar compras" });
@@ -687,6 +706,12 @@ comprasRouter.patch("/:id/anular", async (req: Request, res: Response) => {
     }
 
     const compraAnulada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Guardia atómica PRIMERO, antes de tocar stock — mismo motivo que en
+      // PATCH /facturas/:id/anular: sin esto, un doble clic descontaría el
+      // stock de esta compra dos veces.
+      const guardia = await tx.compra.updateMany({ where: { id, estado: "REGISTRADA" }, data: { estado: "ANULADA" } });
+      if (guardia.count === 0) throw new Error("COMPRA_YA_ANULADA");
+
       for (const detalle of compra.detalles) {
         const nuevoCostoPromedio = actualizarCostoPromedio(
           detalle.producto.stockActual,
@@ -736,8 +761,6 @@ comprasRouter.patch("/:id/anular", async (req: Request, res: Response) => {
         where: { compraDetalleId: { in: compra.detalles.map((d) => d.id) }, estado: "EN_BODEGA" },
       });
 
-      const anulada = await tx.compra.update({ where: { id }, data: { estado: "ANULADA" } });
-
       await revertirAsientoDeOrigen(tx, "COMPRA", id, req.usuario!.usuarioId);
 
       await registrarAuditoria(tx, {
@@ -748,11 +771,14 @@ comprasRouter.patch("/:id/anular", async (req: Request, res: Response) => {
         detalle: `Compra Fact. ${compra.numeroFactura}`,
       });
 
-      return anulada;
+      return tx.compra.findUniqueOrThrow({ where: { id } });
     });
 
     res.json({ mensaje: "Compra anulada y stock corregido", compra: compraAnulada });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "COMPRA_YA_ANULADA") {
+      return res.status(409).json({ error: "Esta compra ya está anulada (alguien más la anuló mientras tanto)" });
+    }
     console.error(error);
     res.status(500).json({ error: "Error al anular la compra" });
   }

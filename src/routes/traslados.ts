@@ -7,6 +7,7 @@
 // igual y opuesto.
 import { Router, Request, Response } from "express";
 import { prisma } from "../db";
+import { leerBusqueda, contiene } from "../utils/busquedaListado";
 import { Prisma } from "@prisma/client";
 import { requirePermiso } from "../middleware/auth";
 import { leerPaginacion, respuestaPaginada } from "../utils/paginacion";
@@ -34,6 +35,22 @@ trasladosRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.TrasladoWhereInput = rango ? { createdAt: rango } : {};
+
+    // Buscador: motivo, bodega/sucursal de origen o destino, usuario que lo
+    // registró o un producto trasladado (nombre o código).
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { motivo: contiene(q) },
+        { bodegaOrigen: { nombre: contiene(q) } },
+        { bodegaDestino: { nombre: contiene(q) } },
+        { sucursalOrigen: { nombre: contiene(q) } },
+        { sucursalDestino: { nombre: contiene(q) } },
+        { usuario: { nombre: contiene(q) } },
+        { detalles: { some: { producto: { OR: [{ nombre: contiene(q) }, { codigo: contiene(q) }] } } } },
+      ];
+    }
+
     const opciones = {
       where,
       include: {

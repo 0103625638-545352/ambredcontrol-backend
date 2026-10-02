@@ -93,6 +93,11 @@ productosRouter.get("/", async (req: Request, res: Response) => {
         ],
       }),
       ...(rango && { createdAt: rango }),
+      // Filtros opcionales de la pantalla Productos (sin ellos, igual que antes).
+      ...(req.query.categoriaId === "sin" && { categoriaId: null }),
+      ...(typeof req.query.categoriaId === "string" && /^[0-9]+$/.test(req.query.categoriaId) && { categoriaId: Number(req.query.categoriaId) }),
+      ...(req.query.tipo === "SERVICIO" && { esServicio: true }),
+      ...(req.query.tipo === "BIEN" && { esServicio: false }),
     };
 
     if (!paginacion.aplica) {
@@ -253,6 +258,14 @@ const SELECT_SERIE_COMPLETA = {
       compra: { select: { id: true, numeroFactura: true, fechaEmision: true, proveedor: { select: { razonSocial: true } } } },
     },
   },
+  // Quién lo tiene en mano ahora mismo (solo tiene sentido cuando estado =
+  // EN_TRANSITO, ver EgresoBodega) — take:1 alcanza porque a lo sumo hay una
+  // línea EN_TRANSITO por serial a la vez (el estado del serial es único).
+  egresosDetalle: {
+    where: { estado: "EN_TRANSITO" as const },
+    take: 1,
+    select: { id: true, egreso: { select: { id: true, empleado: { select: { id: true, nombres: true, apellidos: true } } } } },
+  },
 } as const;
 
 // GET /productos/series/buscar?q=texto
@@ -282,7 +295,7 @@ productosRouter.get("/:id/series", requirePermiso("productos"), async (req: Requ
   try {
     const productoId = Number(req.params.id);
     const estado = req.query.estado;
-    const estadoValido = estado === "EN_BODEGA" || estado === "ENTREGADO" ? estado : undefined;
+    const estadoValido = estado === "EN_BODEGA" || estado === "EN_TRANSITO" || estado === "ENTREGADO" ? estado : undefined;
     const series = await prisma.numeroSerieProducto.findMany({
       where: { productoId, ...(estadoValido ? { estado: estadoValido } : {}) },
       select: SELECT_SERIE_COMPLETA,
@@ -300,7 +313,10 @@ productosRouter.get("/:id/series", requirePermiso("productos"), async (req: Requ
 // Marca esta unidad como entregada a un cliente puntual — deliberadamente
 // desacoplado de facturar/vender (ver comentario en el modelo): se puede
 // hacer en el momento de la venta o mucho después, según le convenga a
-// bodega.
+// bodega. Funciona tanto desde EN_BODEGA (entrega directa, sin pasar por un
+// EgresoBodega) como desde EN_TRANSITO (el técnico ya lo tenía despachado);
+// en este último caso, de paso cierra la línea de egreso correspondiente
+// (ver EgresoBodegaDetalle) para que no quede colgada como pendiente.
 productosRouter.post("/series/:serieId/entregar", requirePermiso("productos"), async (req: Request, res: Response) => {
   try {
     const serieId = Number(req.params.serieId);
@@ -318,15 +334,31 @@ productosRouter.post("/series/:serieId/entregar", requirePermiso("productos"), a
     const cliente = await prisma.cliente.findUnique({ where: { id: Number(clienteId) } });
     if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
 
-    const actualizada = await prisma.numeroSerieProducto.update({
-      where: { id: serieId },
-      data: {
-        estado: "ENTREGADO",
-        clienteId: cliente.id,
-        referenciaDocumento: referenciaDocumento?.trim() || null,
-        fechaEntrega: new Date(),
-      },
-      select: SELECT_SERIE_COMPLETA,
+    const actualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // "Todo o nada" atómico: el chequeo de "serie.estado" de arriba se hizo
+      // FUERA de la transacción, así que entre esa lectura y este punto otra
+      // petición pudo haber entregado (o devuelto) esta misma serie primero.
+      // updateMany con el estado en el WHERE hace el chequeo-y-escritura en
+      // un solo paso atómico — si otra petición ganó la carrera, count da 0 y
+      // se rechaza esta en vez de pisar en silencio la entrega ajena (mismo
+      // criterio que POST /egresos-bodega y el acta de visitas).
+      const resultado = await tx.numeroSerieProducto.updateMany({
+        where: { id: serieId, estado: { in: ["EN_BODEGA", "EN_TRANSITO"] } },
+        data: {
+          estado: "ENTREGADO",
+          clienteId: cliente.id,
+          referenciaDocumento: referenciaDocumento?.trim() || null,
+          fechaEntrega: new Date(),
+        },
+      });
+      if (resultado.count === 0) throw new Error("SERIE_YA_NO_DISPONIBLE");
+
+      await tx.egresoBodegaDetalle.updateMany({
+        where: { numeroSerieProductoId: serieId, estado: "EN_TRANSITO" },
+        data: { estado: "ENTREGADO" },
+      });
+
+      return tx.numeroSerieProducto.findUniqueOrThrow({ where: { id: serieId }, select: SELECT_SERIE_COMPLETA });
     });
 
     await registrarAuditoria(prisma, {
@@ -338,15 +370,20 @@ productosRouter.post("/series/:serieId/entregar", requirePermiso("productos"), a
     });
 
     res.json(actualizada);
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "SERIE_YA_NO_DISPONIBLE") {
+      return res.status(409).json({ error: "Este número de serie ya no está disponible (alguien más lo entregó o lo devolvió primero)" });
+    }
     console.error(error);
     res.status(500).json({ error: "Error al entregar el número de serie" });
   }
 });
 
 // POST /productos/series/:serieId/regresar-a-bodega
-// Corrige una entrega mal asignada — vuelve la unidad a EN_BODEGA, libre
-// para asignarse a otro cliente.
+// Corrige una entrega mal asignada, o una que estaba EN_TRANSITO con un
+// técnico y se decide devolverla sin usar — en ambos casos vuelve la unidad
+// a EN_BODEGA, libre para despacharse/entregarse de nuevo, y cierra la
+// línea de egreso correspondiente si venía de un EgresoBodega.
 productosRouter.post("/series/:serieId/regresar-a-bodega", requirePermiso("productos"), async (req: Request, res: Response) => {
   try {
     const serieId = Number(req.params.serieId);
@@ -356,10 +393,24 @@ productosRouter.post("/series/:serieId/regresar-a-bodega", requirePermiso("produ
       return res.status(409).json({ error: "Este número de serie ya está en bodega" });
     }
 
-    const actualizada = await prisma.numeroSerieProducto.update({
-      where: { id: serieId },
-      data: { estado: "EN_BODEGA", clienteId: null, referenciaDocumento: null, fechaEntrega: null },
-      select: SELECT_SERIE_COMPLETA,
+    const actualizada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Mismo motivo que en POST /series/:id/entregar: el chequeo de estado
+      // de arriba quedó fuera de la transacción, así que el
+      // chequeo-y-escritura real tiene que ser este updateMany atómico, no
+      // un update incondicional — si el estado cambió mientras tanto, count
+      // da 0 y se rechaza en vez de pisar en silencio lo que haya pasado.
+      const resultado = await tx.numeroSerieProducto.updateMany({
+        where: { id: serieId, estado: { in: ["EN_TRANSITO", "ENTREGADO"] } },
+        data: { estado: "EN_BODEGA", clienteId: null, referenciaDocumento: null, fechaEntrega: null },
+      });
+      if (resultado.count === 0) throw new Error("SERIE_YA_NO_DISPONIBLE");
+
+      await tx.egresoBodegaDetalle.updateMany({
+        where: { numeroSerieProductoId: serieId, estado: "EN_TRANSITO" },
+        data: { estado: "DEVUELTO" },
+      });
+
+      return tx.numeroSerieProducto.findUniqueOrThrow({ where: { id: serieId }, select: SELECT_SERIE_COMPLETA });
     });
 
     await registrarAuditoria(prisma, {
@@ -371,7 +422,10 @@ productosRouter.post("/series/:serieId/regresar-a-bodega", requirePermiso("produ
     });
 
     res.json(actualizada);
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "SERIE_YA_NO_DISPONIBLE") {
+      return res.status(409).json({ error: "Este número de serie ya no está disponible (su estado cambió mientras tanto)" });
+    }
     console.error(error);
     res.status(500).json({ error: "Error al regresar el número de serie a bodega" });
   }

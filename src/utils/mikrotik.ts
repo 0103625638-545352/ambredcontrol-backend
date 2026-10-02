@@ -285,19 +285,26 @@ export async function limpiarClienteDeNodo(nodoId: number, direccionIp: string):
   }
 }
 
-export async function suspenderClientePorIp(nodoId: number, direccionIp: string, comentario: string): Promise<void> {
+// Ambas devuelven true solo si el estado CAMBIÓ de verdad en el router (no
+// si ya estaba así) — lo usa el historial de suspensiones
+// (EventoServicioInternet) para no registrar un evento en cada pasada
+// idempotente del job de suspensión automática.
+export async function suspenderClientePorIp(nodoId: number, direccionIp: string, comentario: string): Promise<boolean> {
   const conn = await obtenerConexion(nodoId);
   const entradas = await listarEntradasPorIp(conn, direccionIp);
-  if (entradas.some((e) => e.lista === LISTA_SUSPENDIDOS)) return; // ya estaba suspendido
+  if (entradas.some((e) => e.lista === LISTA_SUSPENDIDOS)) return false; // ya estaba suspendido
   await conn.write("/ip/firewall/address-list/add", [`=list=${LISTA_SUSPENDIDOS}`, `=address=${direccionIp}`, `=comment=${comentario}`]);
+  return true;
 }
 
-export async function reactivarClientePorIp(nodoId: number, direccionIp: string): Promise<void> {
+export async function reactivarClientePorIp(nodoId: number, direccionIp: string): Promise<boolean> {
   const conn = await obtenerConexion(nodoId);
   const entradas = await listarEntradasPorIp(conn, direccionIp);
-  for (const entrada of entradas.filter((e) => e.lista === LISTA_SUSPENDIDOS)) {
+  const suspendidas = entradas.filter((e) => e.lista === LISTA_SUSPENDIDOS);
+  for (const entrada of suspendidas) {
     await conn.write("/ip/firewall/address-list/remove", [`=.id=${entrada.id}`]);
   }
+  return suspendidas.length > 0;
 }
 
 // Para la UI: qué IPs están suspendidas ahora mismo EN ESTE NODO — el

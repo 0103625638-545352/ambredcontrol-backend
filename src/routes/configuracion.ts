@@ -20,7 +20,16 @@ import {
 } from "../utils/logoEmpresa";
 import { rutaComprobantesAutorizados } from "../utils/comprobantesAutorizados";
 import { prisma, empresaActiva, empresaActivaId } from "../db";
-import { rutaAbsoluta, actualizarEmpresa, actualizarCertificadoEmpresa, cicloCorteInternet, type DatosEditablesEmpresa } from "../utils/empresas";
+import {
+  rutaAbsoluta,
+  actualizarEmpresa,
+  actualizarCertificadoEmpresa,
+  actualizarWhatsappEmpresa,
+  whatsappConfigurado,
+  cicloCorteInternet,
+  type DatosEditablesEmpresa,
+  type DatosWhatsappEmpresa,
+} from "../utils/empresas";
 import { registrarAuditoria } from "../utils/auditoria";
 import { invalidarCacheExpiracionCertificado } from "../utils/certificado";
 import { ejecutarBackupDeEmpresa, estadoBackup, backupAtrasado } from "../utils/backupBaseDatos";
@@ -373,6 +382,90 @@ configuracionRouter.post("/certificado", requirePermiso("configuracion"), subirC
   actualizarCertificadoEmpresa(empresaActivaId(), password);
   invalidarCacheExpiracionCertificado(empresaActivaId());
   res.json({ mensaje: "Certificado actualizado" });
+});
+
+// GET /configuracion/whatsapp
+// Nunca devuelve el Access Token real (es un secreto) — solo si ya hay uno
+// cargado ("tieneAccessToken"), igual que /empresa nunca devuelve
+// certificadoP12Password. El resto de campos no son secretos (Phone Number
+// ID, nombre de plantilla) y sí se muestran para poder editarlos.
+configuracionRouter.get("/whatsapp", (_req: Request, res: Response) => {
+  const empresa = empresaActiva();
+  res.json({
+    configurado: whatsappConfigurado(empresa),
+    tieneAccessToken: !!empresa.whatsappAccessToken,
+    whatsappPhoneNumberId: empresa.whatsappPhoneNumberId || "",
+    whatsappTemplateRecordatorio: empresa.whatsappTemplateRecordatorio || "",
+    whatsappTemplateIdioma: empresa.whatsappTemplateIdioma || "",
+    whatsappRecordatorioDiasAntes: empresa.whatsappRecordatorioDiasAntes ?? 3,
+    whatsappRecordatorioHora: empresa.whatsappRecordatorioHora ?? null,
+    whatsappTemplateEncuesta: empresa.whatsappTemplateEncuesta || "",
+  });
+});
+
+// PUT /configuracion/whatsapp
+// Credenciales de la cuenta de WhatsApp Business API (Meta Cloud API) de
+// ESTA empresa — ver el comentario grande en EmpresaConfig.whatsappAccessToken
+// (utils/empresas.ts) sobre por qué esto es por empresa y no una variable
+// global como SMTP. "accessToken" vacío en el body significa "no lo
+// cambies" (para no obligar a repegarlo cada vez que se edita el resto) —
+// solo es obligatorio la primera vez, cuando esta empresa todavía no tiene
+// ninguno guardado.
+configuracionRouter.put("/whatsapp", requirePermiso("configuracion"), (req: Request, res: Response) => {
+  const { accessToken, phoneNumberId, plantilla, idioma, diasAntes, hora, plantillaEncuesta } = req.body;
+
+  if (!phoneNumberId || typeof phoneNumberId !== "string") {
+    return res.status(400).json({ error: "phoneNumberId es obligatorio" });
+  }
+  if (!plantilla || typeof plantilla !== "string") {
+    return res.status(400).json({ error: "plantilla es obligatorio (nombre exacto de la plantilla aprobada en Meta)" });
+  }
+
+  const empresaAntes = empresaActiva();
+  const tokenFinal = typeof accessToken === "string" && accessToken.trim() ? accessToken.trim() : empresaAntes.whatsappAccessToken;
+  if (!tokenFinal) {
+    return res.status(400).json({ error: "accessToken es obligatorio la primera vez que configuras WhatsApp para esta empresa" });
+  }
+
+  const diasAntesNum = diasAntes === undefined || diasAntes === "" ? undefined : Number(diasAntes);
+  if (diasAntesNum !== undefined && (!Number.isInteger(diasAntesNum) || diasAntesNum < 1)) {
+    return res.status(400).json({ error: "diasAntes debe ser un entero mayor o igual a 1" });
+  }
+
+  const horaNum = hora === undefined || hora === "" || hora === null ? undefined : Number(hora);
+  if (horaNum !== undefined && (!Number.isInteger(horaNum) || horaNum < 0 || horaNum > 23)) {
+    return res.status(400).json({ error: "hora debe ser un entero entre 0 y 23" });
+  }
+
+  const cambios: DatosWhatsappEmpresa = {
+    whatsappAccessToken: tokenFinal,
+    whatsappPhoneNumberId: phoneNumberId.trim(),
+    whatsappTemplateRecordatorio: plantilla.trim(),
+    whatsappTemplateIdioma: typeof idioma === "string" && idioma.trim() ? idioma.trim() : undefined,
+    whatsappRecordatorioDiasAntes: diasAntesNum,
+    whatsappRecordatorioHora: horaNum,
+    whatsappTemplateEncuesta: typeof plantillaEncuesta === "string" && plantillaEncuesta.trim() ? plantillaEncuesta.trim() : undefined,
+  };
+
+  const actualizada = actualizarWhatsappEmpresa(empresaActivaId(), cambios);
+
+  registrarAuditoria(prisma, {
+    usuarioId: req.usuario!.usuarioId,
+    accion: "EDITAR_WHATSAPP_EMPRESA",
+    entidad: "Empresa",
+    detalle: `WhatsApp Business configurado: plantilla "${cambios.whatsappTemplateRecordatorio}", ${cambios.whatsappRecordatorioDiasAntes ?? 3} día(s) antes del corte`,
+  }).catch((error) => console.error("No se pudo registrar la auditoría de EDITAR_WHATSAPP_EMPRESA:", error));
+
+  res.json({
+    configurado: whatsappConfigurado(actualizada),
+    tieneAccessToken: !!actualizada.whatsappAccessToken,
+    whatsappPhoneNumberId: actualizada.whatsappPhoneNumberId || "",
+    whatsappTemplateRecordatorio: actualizada.whatsappTemplateRecordatorio || "",
+    whatsappTemplateIdioma: actualizada.whatsappTemplateIdioma || "",
+    whatsappRecordatorioDiasAntes: actualizada.whatsappRecordatorioDiasAntes ?? 3,
+    whatsappRecordatorioHora: actualizada.whatsappRecordatorioHora ?? null,
+    whatsappTemplateEncuesta: actualizada.whatsappTemplateEncuesta || "",
+  });
 });
 
 // Tipos de comprobante cuya numeración puede sembrarse antes de emitir el

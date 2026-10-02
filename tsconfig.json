@@ -14,5 +14,5 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["src", "generar-certificado-prueba.ts"]
+  "include": ["src", "generar-certificado-prueba.ts", "probar-whatsapp.ts"]
 }

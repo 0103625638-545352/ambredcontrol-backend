@@ -23,6 +23,16 @@ import {
 } from "../utils/mikrotik";
 import { registrarAuditoria } from "../utils/auditoria";
 import { prisma } from "../db";
+import { registrarEventoServicioInternet } from "../utils/gestionServicioInternet";
+
+// Suspender/Reactivar a mano trabaja por IP (así lo ve el router) — para el
+// historial de suspensiones hace falta el Cliente detrás de esa IP en ESTE
+// nodo. Una IP sin cliente vinculado (entrada suelta en el router) no deja
+// historial, no hay a quién atribuírselo.
+async function registrarEventoManualPorIp(nodoId: number, ip: string, tipo: "SUSPENDIDO" | "REACTIVADO") {
+  const cliente = await prisma.cliente.findFirst({ where: { nodoId, direccionIp: ip }, select: { id: true } });
+  if (cliente) await registrarEventoServicioInternet(cliente.id, tipo, "MANUAL");
+}
 
 export const mikrotikRouter = Router({ mergeParams: true });
 
@@ -78,7 +88,7 @@ mikrotikRouter.get("/ips-suspendidas", manejar(async (_req, res, nodoId) => {
 mikrotikRouter.patch("/direcciones/:ip/suspender", manejar(async (req, res, nodoId) => {
   const ip = String(req.params.ip);
   const comentario = req.body?.comentario;
-  await suspenderClientePorIp(nodoId, ip, comentario);
+  if (await suspenderClientePorIp(nodoId, ip, comentario)) await registrarEventoManualPorIp(nodoId, ip, "SUSPENDIDO");
   await registrarAuditoria(prisma, {
     usuarioId: req.usuario!.usuarioId,
     accion: "SUSPENDER_CLIENTE_ISP",
@@ -90,7 +100,7 @@ mikrotikRouter.patch("/direcciones/:ip/suspender", manejar(async (req, res, nodo
 
 mikrotikRouter.patch("/direcciones/:ip/reactivar", manejar(async (req, res, nodoId) => {
   const ip = String(req.params.ip);
-  await reactivarClientePorIp(nodoId, ip);
+  if (await reactivarClientePorIp(nodoId, ip)) await registrarEventoManualPorIp(nodoId, ip, "REACTIVADO");
   await registrarAuditoria(prisma, {
     usuarioId: req.usuario!.usuarioId,
     accion: "REACTIVAR_CLIENTE_ISP",

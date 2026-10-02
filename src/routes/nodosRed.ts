@@ -490,6 +490,34 @@ nodosRedRouter.post("/:id/respaldos/:respaldoId/restaurar", async (req: Request,
   }
 });
 
+// PATCH /nodos-red/:id/ubicacion
+// Body: { latitud, longitud } — separado del PUT normal de edición a
+// propósito: se llama desde el mapa de Red Física (ver
+// frontend/src/pages/RedFisicaPage.tsx), no desde el formulario de
+// NodosPage.tsx. Sigue gateado por el permiso "mikrotik" del router (mismo
+// criterio que el resto de este archivo) — mover dónde está ubicado un nodo
+// es parte de administrar el nodo en sí, no del trazado de fibra.
+nodosRedRouter.patch("/:id/ubicacion", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { latitud, longitud } = req.body;
+    if (latitud === undefined || longitud === undefined) {
+      return res.status(400).json({ error: "latitud y longitud son obligatorias" });
+    }
+
+    const nodo = await prisma.nodoRed.update({
+      where: { id },
+      data: { latitud: Number(latitud), longitud: Number(longitud) },
+    });
+
+    res.json(sinPassword(nodo));
+  } catch (error: any) {
+    if (error.code === "P2025") return res.status(404).json({ error: "Nodo de red no encontrado" });
+    console.error(error);
+    res.status(500).json({ error: "Error al ubicar el nodo de red" });
+  }
+});
+
 // POST /nodos-red
 // Body: { nombre, descripcion?, mikrotikHost, mikrotikPuerto?, mikrotikUsuario, mikrotikPassword, mascaraRed?, rangoIpInicio?, rangoIpFin? }
 nodosRedRouter.post("/", async (req: Request, res: Response) => {

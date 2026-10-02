@@ -29,6 +29,8 @@ proveedoresRouter.get("/", async (req: Request, res: Response) => {
         OR: [
           { razonSocial: { contains: busqueda, mode: "insensitive" } },
           { identificacion: { contains: busqueda, mode: "insensitive" } },
+          { email: { contains: busqueda, mode: "insensitive" } },
+          { telefono: { contains: busqueda, mode: "insensitive" } },
         ],
       }),
       ...(rango && { createdAt: rango }),

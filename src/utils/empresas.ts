@@ -62,6 +62,40 @@ export interface EmpresaConfig {
   // todavía en el JSON — se tratan como (1, 5), el default de siempre.
   diaInicioCorte?: number;
   diaFinCorte?: number;
+  // Recordatorio de vencimiento de internet por WhatsApp (ver
+  // jobs/recordatorioVencimientoInternet.ts) — a propósito NO es una
+  // variable global en .env como SMTP: cada empresa manda desde SU PROPIO
+  // número de WhatsApp Business, con SU PROPIA cuenta de Meta. Un número
+  // compartido entre empresas distintas haría que los clientes de una
+  // reciban mensajes "de" otra, rompiendo el mismo aislamiento que ya se
+  // cuida con la base de datos y el certificado SRI de cada una. undefined =
+  // esta empresa todavía no configuró WhatsApp — el job simplemente la
+  // salta, mismo criterio "opcional, se trata como ausente" que el resto de
+  // campos agregados después del lanzamiento inicial.
+  whatsappAccessToken?: string; // token PERMANENTE de un System User, no el temporal de 24h
+  whatsappPhoneNumberId?: string; // Phone Number ID de Meta, no el número de teléfono en sí
+  whatsappTemplateRecordatorio?: string; // nombre EXACTO de la plantilla aprobada en SU Meta Business Manager
+  // Código de idioma EXACTO con el que se aprobó esa plantilla (ver la
+  // columna "Idioma" en WhatsApp Manager > Plantillas de mensajes) — Meta
+  // rechaza el envío si no coincide con el idioma exacto de la plantilla
+  // aprobada, así que "es" a secas no alcanza si se aprobó como "es_EC" o
+  // similar. undefined = usa el default del util (ver utils/whatsapp.ts).
+  whatsappTemplateIdioma?: string;
+  // Días de anticipación sobre el día de corte propio de esta empresa (ver
+  // diaFinCorte/fechaContrato). undefined = usa el default del job (3).
+  whatsappRecordatorioDiasAntes?: number;
+  // Hora del día (0-23, hora local del servidor) en la que ESTA empresa
+  // quiere que se revisen sus recordatorios — a diferencia de
+  // WHATSAPP_RECORDATORIO_HORA en .env (que sigue siendo el default para
+  // quien no fije el suyo), esto es autoservicio: una empresa nueva puede
+  // elegir su propio horario desde Ajustes sin tocar el servidor.
+  whatsappRecordatorioHora?: number;
+  // Plantilla (aprobada en SU Meta Business Manager, categoría "Utility")
+  // para la encuesta de satisfacción después de una visita técnica — ver
+  // jobs/encuestaVisitas.ts. Parámetros: {{1}} nombre del cliente, {{2}}
+  // nombre del técnico; el texto debe pedir responder con un número del 1 al
+  // 5. undefined = no se mandan encuestas (el resto de WhatsApp sigue igual).
+  whatsappTemplateEncuesta?: string;
   activa: boolean;
   createdAt: string;
 }
@@ -180,6 +214,35 @@ export function actualizarCierreContable(id: string, cierreContableHasta: string
   empresas[indice] = { ...empresas[indice], cierreContableHasta: cierreContableHasta ?? undefined };
   guardarRegistryCrudo(empresas);
   return empresas[indice];
+}
+
+export interface DatosWhatsappEmpresa {
+  whatsappAccessToken: string;
+  whatsappPhoneNumberId: string;
+  whatsappTemplateRecordatorio: string;
+  whatsappTemplateIdioma?: string;
+  whatsappRecordatorioDiasAntes?: number;
+  whatsappRecordatorioHora?: number;
+  whatsappTemplateEncuesta?: string;
+}
+
+// Setter propio, mismo criterio que actualizarCertificadoEmpresa: son
+// credenciales de una cuenta de Meta, no datos de negocio comunes como los
+// que ya cubre DatosEditablesEmpresa.
+export function actualizarWhatsappEmpresa(id: string, datos: DatosWhatsappEmpresa): EmpresaConfig {
+  const empresas = leerRegistryCrudo();
+  const indice = empresas.findIndex((e) => e.id === id);
+  if (indice === -1) throw new Error(`Empresa no encontrada: "${id}"`);
+
+  empresas[indice] = { ...empresas[indice], ...datos };
+  guardarRegistryCrudo(empresas);
+  return empresas[indice];
+}
+
+// true si esta empresa ya cargó lo mínimo indispensable para que el job de
+// recordatorios le mande algo — ver jobs/recordatorioVencimientoInternet.ts.
+export function whatsappConfigurado(empresa: EmpresaConfig): boolean {
+  return Boolean(empresa.whatsappAccessToken && empresa.whatsappPhoneNumberId && empresa.whatsappTemplateRecordatorio);
 }
 
 export function rutaAbsoluta(rutaRelativa: string): string {

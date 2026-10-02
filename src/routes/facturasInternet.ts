@@ -20,6 +20,7 @@ import { rutaAbsoluta } from "../utils/empresas";
 import { sucursalDelUsuarioActual } from "../utils/sucursales";
 import { sincronizarProductoDePlan } from "../utils/planProducto";
 import { calcularEstadoPago } from "../utils/estadoPago";
+import { promocionAplicable, montoDescuentoPromocion, type PromocionCandidata } from "../utils/promociones";
 import {
   crearFacturaConItems,
   enviarFacturaAlSri,
@@ -30,6 +31,32 @@ import {
 } from "./facturas";
 
 export const facturasInternetRouter = Router();
+
+// Promociones vigentes AHORA MISMO (por fecha y activo) — se trae una sola
+// vez y se reusa para todos los clientes de la tanda (ver
+// POST /facturar-pagados) o del listado (ver GET /clientes), en vez de
+// consultar la tabla una vez por cliente. Cuál de estas aplica a un cliente
+// puntual lo decide promocionAplicable (utils/promociones.ts), que ya sabe
+// filtrar por plan/antigüedad de contrato.
+async function promocionesVigentesHoy(hoy: Date): Promise<PromocionCandidata[]> {
+  return prisma.promocionPlan.findMany({
+    where: { activo: true, fechaInicio: { lte: hoy }, OR: [{ fechaFin: null }, { fechaFin: { gte: hoy } }] },
+  });
+}
+
+// Descuento absoluto (o undefined si no aplica ninguna) para UN cliente con
+// UN plan, a partir de la lista de promociones ya traída — separado para no
+// repetir la cuenta de montoDescuentoPromocion en los 3 lugares que facturan.
+function descuentoParaCliente(
+  promosVigentes: PromocionCandidata[],
+  cliente: { fechaContrato: Date | null },
+  plan: { id: number; precio: Prisma.Decimal },
+  hoy: Date
+): { descuento: number | undefined; promocion: PromocionCandidata | null } {
+  const promocion = promocionAplicable(promosVigentes, cliente, plan.id, hoy);
+  if (!promocion) return { descuento: undefined, promocion: null };
+  return { descuento: montoDescuentoPromocion(plan.precio, promocion).toNumber(), promocion };
+}
 
 // multer procesa el archivo con busboy, en callbacks que corren mientras el
 // body todavía se está leyendo del socket — bajo carga real de un navegador
@@ -118,6 +145,9 @@ facturasInternetRouter.get("/clientes", async (_req: Request, res: Response) => 
       orderBy: { razonSocial: "asc" },
     });
 
+    const hoy = new Date();
+    const promosVigentes = await promocionesVigentesHoy(hoy);
+
     const resultado = await Promise.all(
       clientes.map(async (cliente) => {
         const productoId = cliente.planInternet?.productoId ?? null;
@@ -143,7 +173,24 @@ facturasInternetRouter.get("/clientes", async (_req: Request, res: Response) => 
               }
             : null;
 
-        return { ...cliente, ultimaFacturaInternet: ultimaFactura, cobroPendiente };
+        // Vista previa de la promo que le tocaría SI se factura hoy —
+        // informativa nada más, el cálculo real (y el que de verdad cuenta)
+        // se repite al momento de facturar de verdad, con la fecha de ESE
+        // instante (ver POST /:clienteId).
+        const { descuento, promocion } = cliente.planInternet
+          ? descuentoParaCliente(promosVigentes, cliente, cliente.planInternet, hoy)
+          : { descuento: undefined, promocion: null };
+        const promocionAplicable =
+          promocion && cliente.planInternet
+            ? {
+                id: promocion.id,
+                nombre: promocion.nombre,
+                porcentajeDescuento: promocion.porcentajeDescuento,
+                precioConDescuento: cliente.planInternet.precio.sub(descuento ?? 0).toFixed(2),
+              }
+            : null;
+
+        return { ...cliente, ultimaFacturaInternet: ultimaFactura, cobroPendiente, promocionAplicable };
       })
     );
 
@@ -194,6 +241,8 @@ facturasInternetRouter.post("/facturar-pagados", async (req: Request, res: Respo
     // clientes de esta tanda — se calcula una sola vez, no por cliente.
     const sucursal = await sucursalDelUsuarioActual(req.usuario!.usuarioId);
     const bodega = await prisma.bodega.findFirst({ where: { sucursalId: sucursal.id, activa: true }, orderBy: { id: "asc" } });
+    const hoy = new Date();
+    const promosVigentes = await promocionesVigentesHoy(hoy);
 
     const detalle: { clienteId: number; razonSocial: string; ok: boolean; secuencial?: string; error?: string }[] = [];
 
@@ -208,10 +257,12 @@ facturasInternetRouter.post("/facturar-pagados", async (req: Request, res: Respo
           ? cliente.planInternet.productoId
           : await prisma.$transaction((tx) => sincronizarProductoDePlan(tx, cliente.planInternet!));
 
+        const { descuento } = descuentoParaCliente(promosVigentes, cliente, cliente.planInternet, hoy);
+
         const factura = await crearFacturaConItems(req.usuario!.usuarioId, {
           clienteId,
           bodegaId: bodega.id,
-          items: [{ productoId, cantidad: 1 }],
+          items: [{ productoId, cantidad: 1, descuento }],
         });
 
         // Adopta los Pago que ya existían (les pone el facturaId recién
@@ -284,13 +335,20 @@ facturasInternetRouter.post("/:clienteId", async (req: Request, res: Response) =
       return res.status(400).json({ error: "Tu sucursal no tiene ninguna bodega activa — crea al menos una para poder facturar" });
     }
 
+    const hoy = new Date();
+    const promosVigentes = await promocionesVigentesHoy(hoy);
+    const { descuento, promocion } = descuentoParaCliente(promosVigentes, cliente, cliente.planInternet, hoy);
+
     const factura = await crearFacturaConItems(req.usuario!.usuarioId, {
       clienteId,
       bodegaId: bodega.id,
-      items: [{ productoId, cantidad: 1 }],
+      items: [{ productoId, cantidad: 1, descuento }],
     });
 
-    res.status(201).json(factura);
+    res.status(201).json({
+      ...factura,
+      promocionAplicada: promocion ? { nombre: promocion.nombre, porcentajeDescuento: promocion.porcentajeDescuento } : null,
+    });
 
     // Mismo criterio que POST /facturas: el envío al SRI va en segundo
     // plano, para no hacer esperar al admin los ~5-10s de firmar+enviar+

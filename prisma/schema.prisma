@@ -118,6 +118,7 @@ model Producto {
   trasladoDetalles         TrasladoDetalle[]
   guiaRemisionDetalles     GuiaRemisionDetalle[]
   numerosSerie             NumeroSerieProducto[]
+  asignacionesMetraje      AsignacionMetraje[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -161,6 +162,16 @@ model NumeroSerieProducto {
 
   createdAt DateTime @default(now())
 
+  // Lado opuesto de EquipoDejadoVisita.numeroSerieProductoId — ver el
+  // comentario ahí sobre por qué el acta de una visita puede, opcionalmente,
+  // apuntar a un serial real de este catálogo.
+  equiposDejadosVisita EquipoDejadoVisita[]
+
+  // Historial de egresos de bodega que movieron esta unidad puntual (ver
+  // EgresoBodegaDetalle) — normalmente uno solo, pero si se devuelve a
+  // bodega y se vuelve a despachar más adelante, queda más de uno.
+  egresosDetalle EgresoBodegaDetalle[]
+
   // Un mismo número de serie no puede repetirse dos veces PARA EL MISMO
   // PRODUCTO (sí podría coincidir por casualidad con el de otro producto
   // distinto — no se fuerza unicidad global, cada fabricante numera el suyo).
@@ -169,6 +180,9 @@ model NumeroSerieProducto {
 
 enum EstadoNumeroSerie {
   EN_BODEGA
+  // Salió de bodega en manos de un técnico vía un EgresoBodega, todavía sin
+  // confirmar en qué cliente terminó — ver ese modelo más abajo.
+  EN_TRANSITO
   ENTREGADO
 }
 
@@ -266,6 +280,7 @@ model Sucursal {
   trasladosDestino Traslado[] @relation("TrasladoDestino")
 
   cajaSesiones CajaSesion[]
+  vehiculos    Vehiculo[]
 }
 
 // Desglose de Producto.stockActual por sucursal — solo existe una fila por
@@ -308,6 +323,8 @@ model Bodega {
 
   trasladosOrigen  Traslado[] @relation("TrasladoBodegaOrigen")
   trasladosDestino Traslado[] @relation("TrasladoBodegaDestino")
+
+  asignacionesMetraje AsignacionMetraje[]
 
   @@unique([sucursalId, nombre])
 }
@@ -532,6 +549,15 @@ model Cliente {
   // null = sin ninguna prórroga vigente (el caso normal).
   prorrogaHasta DateTime?
 
+  // Caché del último ping ICMP a direccionIp — hecho por jobs/pingClientes.ts
+  // cada pocos minutos, SOLO informativo para el Mapa de Red (ver
+  // routes/mapaRed.ts): nunca dispara suspensión ni ninguna otra lógica de
+  // negocio, a diferencia de prorrogaHasta arriba. null = todavía no se ha
+  // medido (recién creado, o sin direccionIp).
+  pingUltimoMs       Int?
+  pingUltimoEstado   String? // "OK" | "SIN_RESPUESTA"
+  pingUltimaMedicion DateTime?
+
   // Fecha en la que el cliente firmó el contrato de internet — el DÍA DEL
   // MES de esta fecha es su propio "día de corte": todos los meses, ese día
   // se valida si ya pagó la factura de su plan (ver
@@ -541,14 +567,72 @@ model Cliente {
   // ese cliente sigue con el día de corte general de la empresa como antes.
   fechaContrato DateTime?
 
+  // Fecha real de arranque del servicio — distinta de fechaContrato (que es
+  // el día de firma/corte de pago): puede que el cliente firme un día y el
+  // técnico lo instale días después. Junto con vigenciaContratoMeses arma la
+  // vigencia mínima pactada, usada al dar de baja al cliente (ver PATCH
+  // /clientes/:id/dar-de-baja y utils/vigenciaContrato.ts) para saber si
+  // cumplió el plazo o si procede una multa por abandono/término
+  // injustificado ("cobro de equipos"). null = todavía no se cargó.
+  fechaInicioServicio   DateTime?
+  // Meses mínimos de permanencia pactados con el cliente — solo se aceptan
+  // 6, 12, 24 o 36 (ver el select del formulario, backend valida lo mismo en
+  // routes/clientes.ts). null = sin plazo mínimo pactado, nunca procede
+  // multa por incumplimiento de vigencia.
+  vigenciaContratoMeses Int?
+
+  // Baja definitiva del servicio — distinta de una suspensión por falta de
+  // pago vía Mikrotik (esa es reversible con "Reactivar"/prórroga). Una vez
+  // dado de baja, el cliente sigue existiendo (factura/pagos/visitas
+  // históricas intactas) pero queda marcado como retirado. activo=false
+  // dispara que se muestre en la UI si cumplió o no la vigencia mínima
+  // pactada arriba.
+  activo     Boolean   @default(true)
+  fechaBaja  DateTime?
+  motivoBaja String?
+
   facturas              Factura[]
   notasVenta            NotaVenta[]
   proformas             Proforma[]
   visitasTecnicas       VisitaTecnica[]
   cobrosInternet        Pago[] // lado opuesto de Pago.clienteId, ver ahí
   numerosSerieRecibidos NumeroSerieProducto[] // equipos serializados entregados a este cliente
+  equiposOlt            OltOnu[] // ONU(s) de OLT vinculadas a este cliente, ver OltOnu
+  switchCliente         SwitchCliente? // switch TP-Link instalado en su domicilio, ver SwitchCliente
+  // Egresos de bodega que se prepararon pensando en este cliente puntual
+  // (ver EgresoBodega.clienteDestinoId) — puramente informativo/de
+  // planificación, no implica que el equipo haya terminado acá.
+  egresosBodegaDestino  EgresoBodega[]
+
+  // Recordatorios de próximo vencimiento de su plan de internet ya
+  // enviados por WhatsApp — ver RecordatorioInternetEnviado abajo.
+  recordatoriosInternet RecordatorioInternetEnviado[]
+
+  // Centro de Control (ver routes/centroControl.ts y routes/tickets.ts).
+  ticketsSoporte          TicketSoporte[]
+  eventosServicioInternet EventoServicioInternet[]
 
   createdAt DateTime @default(now())
+}
+
+// Registro de que ya se le mandó el recordatorio de "tu plan vence pronto"
+// a este cliente EN ESTE CICLO de pago (ver ventanaCicloActual en
+// utils/gestionServicioInternet.ts) — a diferencia de los avisos internos
+// por correo (jobs/alertaVencimientosProximos.ts), acá sí importa no
+// duplicar: es un mensaje real a un cliente real, no un resumen para el
+// negocio. "cicloInicio" es la fecha de inicio de ESE ciclo (no la fecha de
+// envío), así que un mismo cliente nunca recibe dos recordatorios por el
+// mismo mes aunque el job (jobs/recordatorioVencimientoInternet.ts) corra
+// más de una vez ese día.
+model RecordatorioInternetEnviado {
+  id          Int      @id @default(autoincrement())
+  clienteId   Int
+  cliente     Cliente  @relation(fields: [clienteId], references: [id])
+  cicloInicio DateTime
+  canal       String   @default("whatsapp")
+  enviadoEn   DateTime @default(now())
+
+  @@unique([clienteId, cicloInicio])
 }
 
 // Un nodo de red: punto de conexión físico (ej. un armario/caseta de un
@@ -582,12 +666,87 @@ model NodoRed {
   // el nodo está caído, sin depender de que alguien tenga la pantalla
   // abierta todo ese tiempo (queda guardado en la base, no en memoria).
   ultimaConexionExitosa DateTime?
+  // Ubicación física del armario/caseta del nodo — opcional, se carga desde
+  // el mapa de Red Física (ver CajaFibra/TendidoFibra más abajo) con PATCH
+  // /nodos-red/:id/ubicacion, no desde el formulario de edición normal de
+  // NodosPage.tsx. null = todavía no ubicado, no aparece en ese mapa hasta
+  // que se le ponga. Misma precisión que Cliente.latitud/longitud.
+  latitud               Decimal?  @db.Decimal(10, 7)
+  longitud              Decimal?  @db.Decimal(10, 7)
   activo                Boolean   @default(true)
   createdAt             DateTime  @default(now())
 
-  clientes  Cliente[]
-  respaldos RespaldoMikrotik[]
-  vlans     VlanNodo[]
+  clientes      Cliente[]
+  respaldos     RespaldoMikrotik[]
+  vlans         VlanNodo[]
+  olts          Olt[] // OLTs físicamente ubicadas/asociadas a este nodo, ver Olt (opcional)
+  cajasFibra    CajaFibra[]
+  tendidosFibra TendidoFibra[]
+}
+
+// --- Módulo de RED FÍSICA (trazado de fibra) ---
+// Reemplaza el uso de Google Earth para dibujar por dónde va la fibra:
+// cajas/NAP puntuales (CajaFibra) y los tramos de cable que las conectan
+// (TendidoFibra), ambos con coordenadas reales para pintarlos sobre el mismo
+// Leaflet que ya usa Mapa de Red (ver MapaRedFisica.tsx). Gateado por el
+// permiso "red_fisica" (ver/editar separados, ver utils/permisos.ts).
+
+// Un punto puntual del tendido: NAP, empalme, murete, poste, cámara, etc.
+// "tipo" es texto libre con sugerencias en el formulario (no un enum) porque
+// la variedad real de campo no encaja bien en una lista cerrada — mismo
+// criterio que SwitchCliente.modelo.
+model CajaFibra {
+  id     Int    @id @default(autoincrement())
+  codigo String // ej. "NAP-045"
+  tipo   String // ej. "NAP" | "Empalme" | "Murete" | "Poste" | "Cámara" — texto libre
+
+  latitud  Decimal @db.Decimal(10, 7)
+  longitud Decimal @db.Decimal(10, 7)
+
+  // Cuántos puertos tiene ESTA caja puntual (solo tiene sentido para un NAP)
+  // — informativo, no se valida contra nada.
+  capacidadPuertos Int?
+  descripcion      String?
+
+  // A qué sector pertenece — opcional, solo para filtrar el mapa por nodo.
+  nodoId Int?
+  nodo   NodoRed? @relation(fields: [nodoId], references: [id])
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tendidosOrigen  TendidoFibra[] @relation("TendidoOrigen")
+  tendidosDestino TendidoFibra[] @relation("TendidoDestino")
+}
+
+// Un tramo de cable trazado sobre el mapa — el equivalente a una línea
+// dibujada en Google Earth. "trazado" guarda el arreglo de puntos
+// [{lat,lng}, ...] tal como se dibujó (mismo patrón de Json "de forma libre"
+// que RespaldoMikrotik.contenido); la distancia en metros se calcula al
+// vuelo a partir de esos puntos cuando hace falta mostrarla, nunca se guarda
+// acá, para que no quede desactualizada si se edita el trazo.
+model TendidoFibra {
+  id      Int     @id @default(autoincrement())
+  nombre  String?
+  tipo    String // ej. "Troncal" | "Distribución" | "Acometida" — texto libre
+  trazado Json // [{ lat: number, lng: number }, ...], en el orden dibujado
+
+  origenCajaId  Int?
+  origenCaja    CajaFibra? @relation("TendidoOrigen", fields: [origenCajaId], references: [id])
+  destinoCajaId Int?
+  destinoCaja   CajaFibra? @relation("TendidoDestino", fields: [destinoCajaId], references: [id])
+
+  // A qué sector pertenece — opcional, solo para filtrar el mapa por nodo.
+  nodoId Int?
+  nodo   NodoRed? @relation(fields: [nodoId], references: [id])
+
+  estado   String  @default("ACTIVO") // "ACTIVO" | "CORTADO" | "EN_MANTENIMIENTO"
+  // Color propio para distinguir tramos a simple vista en el mapa (ej. troncal
+  // de un color, acometidas de otro) — null = usa el color por defecto según tipo.
+  colorHex String?
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 // Una VLAN configurada en el Mikrotik de un nodo — un mismo router puede
@@ -652,6 +811,137 @@ model RespaldoMikrotik {
   createdAt DateTime @default(now())
 }
 
+// --- Módulo de OLT (Optical Line Terminal) ---
+// Inventario de las OLT Huawei del ISP (ej. MA5608T, MA5800-X7) y las ONUs
+// (equipos de cliente) que cuelgan de cada una. El sistema NO configura la
+// OLT — el alta/baja real de una ONU se sigue haciendo desde la herramienta
+// propia de Huawei (Telnet/SSH o U2000/NCE) — acá solo se CONSULTA por SNMP
+// (solo lectura) el estado/señal óptica de cada ONU, y se guarda el vínculo
+// ONU↔Cliente para diagnóstico y ubicación rápida (ver utils/oltHuawei.ts).
+// Igual criterio que NodoRed con el Mikrotik: cada OLT tiene sus propias
+// credenciales, nunca compartidas entre equipos.
+model Olt {
+  id          Int    @id @default(autoincrement())
+  nombre      String // ej. "OLT Central", "OLT Misicata"
+  modelo      String // "MA5608T" | "MA5800-X7" (validado en routes/olts.ts)
+  direccionIp String
+  snmpPuerto  Int    @default(161)
+  snmpVersion String @default("2c") // "1" | "2c" | "3"
+
+  // SNMP v1/v2c
+  snmpComunidad String?
+
+  // SNMP v3 — los 5 quedan null si snmpVersion no es "3"
+  snmpUsuario       String?
+  snmpAuthProtocolo String? // "MD5" | "SHA"
+  snmpAuthPassword  String?
+  snmpPrivProtocolo String? // "DES" | "AES"
+  snmpPrivPassword  String?
+
+  // SSH (VRP CLI de Huawei) — usado SOLO por la "Vista por puerto GPON" del
+  // Mapa de Red (ver utils/oltHuaweiSsh.ts) para traer temperatura/distancia
+  // por ONT, datos que el firmware no siempre expone por SNMP estándar.
+  // null = SSH no configurado en esta OLT, esa vista queda deshabilitada
+  // para ella (pero SNMP sigue funcionando igual). Mismo criterio de
+  // "nunca se expone al frontend" que snmpAuthPassword/snmpPrivPassword.
+  sshPuerto   Int     @default(22)
+  sshUsuario  String?
+  sshPassword String?
+
+  ubicacion String? // referencia física/sector, informativo
+
+  // Nodo de red al que pertenece esta OLT — opcional, solo organizativo (no
+  // participa de ninguna lógica de suspensión, igual criterio que
+  // Cliente.vlanNodoId).
+  nodoId Int?
+  nodo   NodoRed? @relation(fields: [nodoId], references: [id])
+
+  // Última vez que el polling SNMP (ver jobs/pollingOlt.ts) logró conectarse
+  // — null = nunca. Mismo criterio que NodoRed.ultimaConexionExitosa.
+  ultimaConexionExitosa DateTime?
+  activo                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+
+  onus       OltOnu[]
+  eventos    OltEvento[]
+  alertasRed AlertaRed[]
+}
+
+// Una ONU (equipo de cliente) detectada en un puerto PON de una OLT —
+// identificada por su posición física (slot/puerto/índice dentro del
+// puerto) más su número de serie. Se crea/actualiza SOLO por el polling o
+// "Sincronizar ahora" (ver POST /olts/:id/sincronizar) — nunca a mano, para
+// que siempre refleje lo que la OLT realmente tiene conectado.
+// estado/rxPowerDbm/txPowerDbm son un CACHÉ del último dato leído por SNMP
+// (se sobreescriben en cada sincronización), no un historial — para eso
+// está OltEvento.
+model OltOnu {
+  id       Int    @id @default(autoincrement())
+  oltId    Int
+  olt      Olt    @relation(fields: [oltId], references: [id])
+  // Frame (chasis) dentro de la OLT — 0 en el 99% de los equipos (chasis
+  // único, ej. MA5608T/MA5800-X7 standalone); solo importa en un stack
+  // multi-chasis. No forma parte de la clave única de abajo a propósito: el
+  // polling SNMP (sincronizarOlt) no lo detecta y siempre asume 0, mientras
+  // que la "Vista por puerto GPON" (SSH, ver utils/oltHuaweiSsh.ts) sí lo
+  // pide explícitamente al técnico.
+  frame    Int    @default(0)
+  slot     Int // tarjeta/slot PON dentro de la OLT
+  puerto   Int // puerto PON dentro de esa tarjeta
+  onuIndex Int // ID de la ONU dentro de ese puerto (1..128 típico)
+  serial   String // número de serie que reporta la ONU (ej. "HWTC12345678")
+
+  descripcion String? // nombre/descripción configurada en la OLT, si la reporta
+
+  // Datos que solo trae la "Vista por puerto GPON" por SSH (ver
+  // utils/oltHuaweiSsh.ts) — el polling SNMP nunca los toca, quedan null
+  // hasta la primera "Consultar puerto" sobre esa ONU.
+  temperaturaCelsius Decimal? @db.Decimal(5, 2)
+  distanciaMetros    Int?
+  ipGestion          String?
+
+  // Vínculo con el Cliente del sistema — es la única parte "de escritura"
+  // que hace este módulo: asignar/desasignar manualmente qué cliente
+  // corresponde a esta ONU (ver PATCH /olts/:id/onus/:onuId/asignar-cliente).
+  // Null = ONU detectada pero todavía sin vincular a ningún cliente.
+  clienteId Int?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  estado        String? // "ONLINE" | "OFFLINE" — null = todavía no sincronizada
+  rxPowerDbm    Decimal?  @db.Decimal(6, 2)
+  txPowerDbm    Decimal?  @db.Decimal(6, 2)
+  ultimaLectura DateTime?
+
+  // false cuando el último "Sincronizar ahora" ya NO encontró esta ONU en la
+  // OLT (se retiró/reemplazó físicamente) — se conserva el registro (y su
+  // vínculo con Cliente/eventos históricos) en vez de borrarlo.
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  eventos       OltEvento[]
+  // Historial de señal óptica (una lectura por hora como máximo), ver
+  // LecturaSenalOnu — rxPowerDbm de arriba sigue siendo solo el último dato.
+  lecturasSenal LecturaSenalOnu[]
+
+  @@unique([oltId, slot, puerto, onuIndex])
+}
+
+// Bitácora de transiciones detectadas por el polling (alta/baja de señal,
+// online/offline) — a diferencia de OltOnu.estado (que es un caché que se
+// pisa en cada sincronización), esto es el historial de lo que fue pasando,
+// para poder revisar después "¿desde cuándo está caída esta ONU?".
+model OltEvento {
+  id       Int     @id @default(autoincrement())
+  oltId    Int
+  olt      Olt     @relation(fields: [oltId], references: [id])
+  oltOnuId Int?
+  oltOnu   OltOnu? @relation(fields: [oltOnuId], references: [id])
+
+  tipo    String // "ONU_ONLINE" | "ONU_OFFLINE" | "ONU_NUEVA" | "ONU_DESAPARECIO" | "OLT_SIN_RESPUESTA"
+  mensaje String?
+  fecha   DateTime @default(now())
+}
+
 // Catálogo de planes de internet que un Cliente del ISP puede contratar
 // (nombre + velocidad + precio). Al asignarlo a un Cliente con direccionIp
 // y nodoId ya configurados, el sistema sincroniza solo la address-list en
@@ -680,7 +970,128 @@ model PlanInternet {
   productoId Int?      @unique
   producto   Producto? @relation(fields: [productoId], references: [id])
 
-  clientes Cliente[]
+  clientes    Cliente[]
+  promociones PromocionPlan[]
+}
+
+// Descuento temporal sobre la facturación mensual de internet (ver
+// utils/promociones.ts, aplicado en routes/facturasInternet.ts) — pensado
+// para dos casos reales de un ISP: una campaña por fecha calendario ("todo
+// octubre, 50% para todos") o un incentivo de bienvenida atado a la
+// antigüedad del contrato ("60% los primeros 3 meses de clientes nuevos").
+// NUNCA toca PlanInternet.precio ni el Producto espejo (ver
+// planProducto.ts) — el precio "de lista" del plan sigue intacto; esto solo
+// resta un % como Prisma.Decimal FacturaDetalle.descuento (que ya existía,
+// sin usar en facturación de internet) en el momento puntual de facturar.
+// Como es un descuento por línea copiado AL MOMENTO de facturar (ver
+// FacturaDetalle.precioUnitario), las facturas ya emitidas nunca cambian si
+// se edita o desactiva la promoción después.
+enum AlcancePromocion {
+  TODOS_LOS_CLIENTES
+  CLIENTES_NUEVOS
+}
+
+model PromocionPlan {
+  id                  Int              @id @default(autoincrement())
+  nombre              String
+  porcentajeDescuento Decimal          @db.Decimal(5, 2) // 0-100
+  fechaInicio         DateTime
+  // null = todavía sin fecha de cierre definida (promo abierta hasta que se
+  // desactive a mano) — a diferencia de fechaInicio, que siempre es
+  // obligatoria.
+  fechaFin            DateTime?
+  alcance             AlcancePromocion @default(TODOS_LOS_CLIENTES)
+  // Solo tiene sentido con alcance=CLIENTES_NUEVOS: cuántos meses desde
+  // Cliente.fechaContrato sigue vigente para ESE cliente (ej. 3 = aplica en
+  // su 1er, 2do y 3er mes de contrato, deja de aplicar en el 4to).
+  mesesDesdeContrato  Int?
+  // null = aplica a cualquier plan de internet; si se pone, solo a ESE plan
+  // puntual (ver utils/promociones.ts sobre la precedencia entre ambas).
+  planInternetId      Int?
+  planInternet        PlanInternet?    @relation(fields: [planInternetId], references: [id])
+  activo              Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+}
+
+// Switch TP-Link instalado en el domicilio del cliente (el equipo que
+// reparte la señal Wi-Fi/Ethernet dentro de la vivienda) — a diferencia de
+// la OLT (un equipo central que reporta muchas ONUs), acá cada switch es un
+// equipo INDEPENDIENTE, uno por cliente, con su propia IP a monitorear por
+// SNMP (ver utils/switchTpLink.ts). Mismo alcance de "solo lectura" que el
+// módulo de OLT: nunca se configura nada del switch desde acá.
+model SwitchCliente {
+  id              Int     @id @default(autoincrement())
+  clienteId       Int     @unique
+  cliente         Cliente @relation(fields: [clienteId], references: [id])
+  direccionIp     String
+  modelo          String? // texto libre — TP-Link tiene muchos modelos/familias distintas
+  // Cuántos puertos tiene ESTE switch puntual (varía por modelo: 5, 8, 16...)
+  // — determina hasta qué ifIndex recorrer al sincronizar.
+  cantidadPuertos Int     @default(8)
+
+  snmpPuerto        Int     @default(161)
+  snmpVersion       String  @default("2c") // "1" | "2c" | "3" — la inmensa mayoría de TP-Link "Easy Smart"/"JetStream" solo habla v1/v2c
+  snmpComunidad     String? @default("public")
+  snmpUsuario       String?
+  snmpAuthProtocolo String?
+  snmpAuthPassword  String?
+  snmpPrivProtocolo String?
+  snmpPrivPassword  String?
+
+  ultimaConexionExitosa DateTime?
+  activo                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+
+  puertos SwitchPuerto[]
+  eventos SwitchEvento[]
+}
+
+// Estado cacheado de UN puerto de un SwitchCliente — se pisa en cada
+// sincronización (igual criterio que OltOnu.estado/rxPowerDbm), el
+// historial de transiciones vive en SwitchEvento aparte.
+model SwitchPuerto {
+  id                   Int           @id @default(autoincrement())
+  switchId             Int
+  switch               SwitchCliente @relation(fields: [switchId], references: [id])
+  numeroPuerto         Int // 1-based, como se rotula físicamente en el equipo
+  estado               String? // "UP" | "DOWN" — null = todavía no sincronizado
+  velocidadMbps        Int? // negociada (ifSpeed/ifHighSpeed), null si el puerto está DOWN
+  // Contadores acumulados crudos (ifHCIn/OutOctets) tal como los reportó la
+  // ÚLTIMA sincronización — se guardan para poder calcular el tráfico
+  // (bytes/seg) en la sincronización SIGUIENTE contra el tiempo transcurrido;
+  // no son, por sí solos, una velocidad.
+  contadorEntradaBytes BigInt?
+  contadorSalidaBytes  BigInt?
+  // Tasa YA CALCULADA en la última sincronización (bytes/seg promedio desde
+  // la sincronización anterior) — esto es lo que se muestra en pantalla.
+  trafficEntradaBps    Int?
+  trafficSalidaBps     Int?
+  // Estado de entrega de PoE en este puerto — "DELIVERING_POWER" |
+  // "SEARCHING" | "FAULT" | "DISABLED" | null (sin dato/puerto no-PoE). Se
+  // guarda el ESTADO, no el vataje exacto: la potencia real en watts no es
+  // un dato estandarizado entre fabricantes por SNMP (ver advertencia de
+  // calibración en utils/switchTpLink.ts) — el estado sí alcanza para el
+  // caso de uso real: saber si una antena/AP dejó de recibir energía.
+  poeEstado            String?
+  ultimaLectura        DateTime?
+
+  eventos SwitchEvento[]
+
+  @@unique([switchId, numeroPuerto])
+}
+
+// Bitácora de transiciones UP/DOWN de un puerto (mismo criterio que
+// OltEvento) — para poder responder "¿desde cuándo está caído este puerto?"
+// sin depender del caché de SwitchPuerto, que se pisa en cada sincronización.
+model SwitchEvento {
+  id             Int           @id @default(autoincrement())
+  switchId       Int
+  switch         SwitchCliente @relation(fields: [switchId], references: [id])
+  switchPuertoId Int?
+  switchPuerto   SwitchPuerto? @relation(fields: [switchPuertoId], references: [id])
+  tipo           String // "PUERTO_UP" | "PUERTO_DOWN" | "SWITCH_SIN_RESPUESTA"
+  mensaje        String?
+  fecha          DateTime      @default(now())
 }
 
 // Categoría de precio de venta configurable por el admin (ej. "Mayorista",
@@ -846,7 +1257,7 @@ model Pago {
   // bancoOrigen es una relación al catálogo Banco (no texto libre) — ver el
   // comentario de ese modelo arriba.
   bancoOrigenId         Int?
-  bancoOrigen           Banco?   @relation(fields: [bancoOrigenId], references: [id])
+  bancoOrigen           Banco?    @relation(fields: [bancoOrigenId], references: [id])
   numeroCuentaOrigen    String?
   tarjetaUltimosDigitos String?
   tarjetaTipo           String? // "CREDITO" | "DEBITO"
@@ -855,9 +1266,9 @@ model Pago {
   // falta más que eso para identificar el cobro contra el comprobante del
   // datafono. tarjetaReferencia/tarjetaLote sí son datos propios de ESE
   // comprobante (no del plástico), sin ese riesgo.
-  tarjetaReferencia String? // N° de referencia que imprime el datafono
-  tarjetaLote       String? // N° de lote de la transacción (conciliación con el banco)
-  chequeNumero      String?
+  tarjetaReferencia     String? // N° de referencia que imprime el datafono
+  tarjetaLote           String? // N° de lote de la transacción (conciliación con el banco)
+  chequeNumero          String?
   chequeFechaCobro      DateTime? // CHEQUE: fecha en la que el cheque es cobrable (puede ser posfechado)
 
   // Si este Pago liquidó una Cuota de un plan a plazos (ver modelo Cuota
@@ -1017,6 +1428,12 @@ model Usuario {
   cajaSesionesCerradas CajaSesion[]      @relation("CajaSesionCerradaPor")
   movimientosCaja      MovimientoCaja[]
   asientosContables    AsientoContable[]
+
+  cargasCombustibleRegistradas      CargaCombustible[]
+  mantenimientosVehiculoRegistrados MantenimientoVehiculo[]
+  egresosBodegaCreados              EgresoBodega[]
+  ticketsCreados                    TicketSoporte[]
+  mensajesTicket                    MensajeTicket[]
 }
 
 // Bitácora de acciones sensibles (anular, eliminar, editar, desactivar) que
@@ -1174,9 +1591,9 @@ model Proveedor {
 }
 
 model Compra {
-  id            Int      @id @default(autoincrement())
-  numeroFactura String // número de factura/comprobante que trae el PROVEEDOR, no lo generamos nosotros
-  fechaEmision  DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  numeroFactura      String // número de factura/comprobante que trae el PROVEEDOR, no lo generamos nosotros
+  fechaEmision       DateTime @default(now())
   // Código de la tabla oficial de "Sustento Tributario" del SRI (ej. "01"
   // crédito tributario IVA bienes, "06" crédito tributario IVA servicios —
   // ver Tabla 5 de la Ficha Técnica del comprobante). A PROPÓSITO no hay
@@ -1653,17 +2070,34 @@ model Empleado {
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  rolesDePagos     RolDePagos[]
-  decimosTerceros  DecimoTercero[]
-  decimosCuartos   DecimoCuarto[]
-  vacaciones       Vacacion[]
-  utilidadDetalles UtilidadDetalle[]
-  liquidacion      Liquidacion?
-  marcaciones      Marcacion[]
-  rutasVisita      RutaVisita[]
+  rolesDePagos        RolDePagos[]
+  decimosTerceros     DecimoTercero[]
+  decimosCuartos      DecimoCuarto[]
+  vacaciones          Vacacion[]
+  utilidadDetalles    UtilidadDetalle[]
+  liquidacion         Liquidacion?
+  marcaciones         Marcacion[]
+  rutasVisita         RutaVisita[]
+  asignacionesMetraje AsignacionMetraje[]
   // Lado inverso de Usuario.empleadoId — un Empleado puede o no tener
   // cuenta de acceso vinculada (ver comentario en Usuario).
-  usuario          Usuario?
+  usuario             Usuario?
+
+  // Historial de vehículos que usó día a día (ver UsoVehiculo) — un
+  // técnico no tiene un vehículo fijo, cada fila es un día puntual.
+  usosVehiculo UsoVehiculo[]
+
+  // Historial de posiciones GPS de su celular (ver UbicacionTecnico) — un
+  // punto cada vez que la app móvil manda una lectura, mientras el técnico
+  // la tiene abierta.
+  ubicaciones UbicacionTecnico[]
+
+  // Egresos de bodega recibidos (equipos que le despacharon para llevar a
+  // una visita, ver EgresoBodega) — un técnico no tiene equipos "propios",
+  // cada egreso es un despacho puntual.
+  egresosBodegaRecibidos EgresoBodega[]
+
+  ticketsAsignados TicketSoporte[]
 }
 
 // Un registro por empleado por mes — el corazón del módulo. "Pagar" genera
@@ -1877,6 +2311,13 @@ model VisitaTecnica {
   // no, texto libre (nombre de un prospecto sin registrar).
   nombreContacto String
   direccion      String? // texto libre, ej. copiado del mensaje de WhatsApp
+  // Qué debe hacer el técnico en esta parada (ej. "Revisión de equipos",
+  // "Fibra óptica rota", "Cambio de router") — lo define quien arma la ruta,
+  // ANTES de la visita. Distinto de descripcionTrabajo (lo que el técnico
+  // reporta que hizo, después de "Llegué") y de observaciones (por qué se
+  // omitió, si aplica). Opcional: una instalación nueva, por ejemplo, ya se
+  // sobreentiende sin necesidad de escribirlo.
+  motivoVisita   String?
 
   // Ubicación PLANEADA — la que el cliente mandó por WhatsApp, ingresada a
   // mano en el mapa por el despachador (ver components/MapaGeocerca.tsx).
@@ -1918,15 +2359,105 @@ model VisitaTecnica {
   fotoTrabajoUrl     String?
   fotoViviendaUrl    String?
   equiposDejados     EquipoDejadoVisita[]
+
+  // Si esta visita fue una instalación nueva o una mejora/mantenimiento a un
+  // cliente que ya tenía servicio — lo indica el técnico al llenar el acta,
+  // no se infiere solo (un cliente ya registrado igual puede recibir una
+  // "instalación nueva" si es un punto adicional). Opcional, igual que el
+  // resto del acta.
+  tipoTrabajo TipoTrabajoVisita?
+
+  // Insumos consumidos en el trabajo que no son un equipo identificable ni
+  // se guardan por serial (cinta aislante, canaleta, conectores, amarras,
+  // etc.) — a propósito una lista aparte de equiposDejados: ahí un router
+  // "queda" en la vivienda y puede rastrearse por serial, acá solo importa
+  // cuánto se usó de qué. NO descuenta stock (mismo criterio que
+  // equiposDejados con tipo libre): es un registro de respaldo de lo que se
+  // usó, no un movimiento de inventario formal.
+  materialesUtilizados MaterialUtilizadoVisita[]
+
+  // Centro de Control: ticket que originó esta visita (si vino de uno) y
+  // la encuesta de satisfacción enviada al cliente por WhatsApp después.
+  ticketSoporte TicketSoporte?
+  encuesta      EncuestaVisita?
+}
+
+enum TipoTrabajoVisita {
+  INSTALACION_NUEVA
+  MEJORA_EXISTENTE
+}
+
+// Ver comentario de VisitaTecnica.materialesUtilizados arriba.
+model MaterialUtilizadoVisita {
+  id       Int           @id @default(autoincrement())
+  visitaId Int
+  visita   VisitaTecnica @relation(fields: [visitaId], references: [id])
+
+  descripcion String // texto libre, ej. "Cinta aislante", "Canaleta 20x10"
+  cantidad    Int
+  unidad      String @default("UNIDAD") // ej. "metros", "unidades"
+
+  createdAt DateTime @default(now())
+}
+
+// --- Módulo de METRAJE DE CABLE (rollos asignados a técnicos) ---
+// Un rollo entero (ej. 305m de cable UTP) entregado a un técnico para que lo
+// lleve consigo — sale de la bodega como una SALIDA real de inventario en
+// ESE momento (ver POST /metraje/asignaciones, mismo mecanismo de
+// MovimientoInventario que routes/movimientos.ts), no recién cuando se
+// reporta uso: el técnico ya se lo llevó físicamente. Después, cada visita
+// donde usa parte de ese rollo descuenta metrosRestantes (ver
+// EquipoDejadoVisita.metrosUsados abajo) sin volver a tocar el stock de
+// bodega — ya salió entero al crear esta fila.
+//
+// Los metros se guardan en enteros (no Decimal) a propósito: un técnico
+// reporta "usé 15 metros", nunca fracciones — evita migrar TODO el resto
+// del inventario (Producto.stockActual, StockBodega, StockSucursal,
+// MovimientoInventario.cantidad son Int) a Decimal por esta sola
+// funcionalidad.
+model AsignacionMetraje {
+  id Int @id @default(autoincrement())
+
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  // Bodega de la que salió el rollo — se reutiliza si se devuelve sobrante
+  // al cerrar la asignación (ver PATCH /metraje/asignaciones/:id/cerrar).
+  bodegaId Int
+  bodega   Bodega @relation(fields: [bodegaId], references: [id])
+
+  metrosIniciales Int
+  // Baja con cada EquipoDejadoVisita.metrosUsados que apunte a esta
+  // asignación — nunca vuelve a descontar stock de bodega por esto.
+  metrosRestantes Int
+
+  // Cuadre al cerrar el rollo (ver PATCH /metraje/asignaciones/:id/cerrar):
+  // metros que el técnico devolvió FÍSICAMENTE, medidos en bodega, contra
+  // lo que el sistema esperaba (metrosRestantes). metrosFaltantes > 0 =
+  // cable que no aparece en ninguna acta de visita ni volvió a bodega.
+  // null en ambos = se cerró sin contar (comportamiento anterior).
+  metrosDevueltosFisicos Int?
+  metrosFaltantes        Int?
+
+  // false = cerrada (agotada o cerrada a mano, ej. el técnico devolvió el
+  // sobrante) — deja de ofrecerse en el selector de la visita ("mis
+  // rollos"), pero el historial de consumos queda intacto.
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  equiposDejados EquipoDejadoVisita[]
 }
 
 // Un ítem dejado en la vivienda durante la visita (router Mikrotik, ONU,
 // cable, etc.) — varios por visita, por eso es una tabla aparte y no campos
-// sueltos en VisitaTecnica. A propósito NO está vinculado a Producto/stock:
-// esto es un acta de lo que el técnico dice que dejó, no un movimiento de
-// inventario formal (esa es una venta/traslado, con su propio flujo ya
-// existente) — mezclar los dos haría que cualquier error de tipeo acá
-// descuadre el kardex.
+// sueltos en VisitaTecnica. Sigue sin ser un movimiento de inventario
+// formal (esa es una venta/traslado, con su propio flujo ya existente):
+// tipo/modelo/serial siguen siendo texto libre, así que un equipo que no
+// está en el catálogo (cable, conectores) se anota igual que siempre.
+// numeroSerieProductoId y asignacionMetrajeId son las dos únicas
+// excepciones, ambas opcionales a propósito — ver abajo.
 model EquipoDejadoVisita {
   id       Int           @id @default(autoincrement())
   visitaId Int
@@ -1938,6 +2469,32 @@ model EquipoDejadoVisita {
   // equipo — se guarda como texto libre porque a veces el técnico anota el
   // serial impreso en la caja en vez de la MAC.
   serial String?
+
+  // Se llena SOLO cuando el técnico eligió el serial de un select
+  // alimentado por el catálogo real (ver GET
+  // /visitas/catalogo-equipos/:id/series) — si lo tipeó a mano queda null,
+  // "serial" arriba sigue siendo el único registro de lo que escribió. PATCH
+  // /:id/detalle-trabajo usa este campo para marcar ese NumeroSerieProducto
+  // como ENTREGADO al guardar (y devolverlo a EN_BODEGA si se quita del acta
+  // después), para que dos técnicos no puedan elegir el mismo serial dos
+  // veces. Deliberadamente opcional: es la única grieta que se abre en el
+  // desacople acta/inventario de este modelo, y solo aplica cuando el dato
+  // viene de una elección real, nunca de texto libre.
+  numeroSerieProductoId Int?
+  numeroSerieProducto   NumeroSerieProducto? @relation(fields: [numeroSerieProductoId], references: [id])
+
+  // Igual criterio que numeroSerieProductoId arriba: se llena SOLO cuando
+  // el técnico elige descontar metros de UNO DE SUS rollos asignados (ver
+  // GET /metraje/mis-rollos), nunca a partir de texto libre. metrosUsados es
+  // obligatorio cuando esto está seteado (ver validación en
+  // PATCH /:id/detalle-trabajo) — al guardar, se descuenta de
+  // AsignacionMetraje.metrosRestantes; si la fila se borra o se cambia en
+  // una edición posterior del acta, el delta se revierte, nunca se pierde
+  // ni se duplica (mismo "reemplaza la lista completa" que ya usan los
+  // seriales).
+  asignacionMetrajeId Int?
+  asignacionMetraje   AsignacionMetraje? @relation(fields: [asignacionMetrajeId], references: [id])
+  metrosUsados        Int?
 
   createdAt DateTime @default(now())
 }
@@ -1972,4 +2529,530 @@ model SinonimoBusqueda {
   // pero no hay razón técnica para prohibirlo) — lo que no tiene sentido es
   // agregar la misma palabra dos veces a la MISMA categoría.
   @@unique([categoria, palabra])
+}
+
+// --- Módulo de VEHÍCULOS (flota de la empresa) ---
+// Control de los vehículos de trabajo: no tienen un dueño fijo — cualquier
+// técnico puede tomar cualquier vehículo un día dado (ver UsoVehiculo más
+// abajo, el corazón del módulo: abre/cierra el día como una CajaSesion, pero
+// para un vehículo en vez de una caja) — más el historial de cargas de
+// combustible (rendimiento) y mantenimientos (aceite, pastillas de freno,
+// filtros, etc.). Gateado por el permiso "vehiculos" (ver/editar separados,
+// ver utils/permisos.ts).
+model Vehiculo {
+  id    Int    @id @default(autoincrement())
+  placa String @unique
+
+  // Catálogo, no texto libre — evita que "Chevrolet"/"chevrolet"/"Chevrolt"
+  // convivan como si fueran marcas distintas (ver MarcaVehiculo/
+  // ModeloVehiculo abajo). modeloId siempre pertenece a marcaId (se valida
+  // en routes/vehiculos.ts), no hay una FK compuesta porque Prisma no las
+  // necesita para esto — alcanza con validar en la ruta.
+  marcaId  Int
+  marca    MarcaVehiculo  @relation(fields: [marcaId], references: [id])
+  modeloId Int
+  modelo   ModeloVehiculo @relation(fields: [modeloId], references: [id])
+
+  anio  Int?
+  color String?
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  // Caché del mayor kilometraje registrado entre todas las cargas de
+  // combustible, mantenimientos y usos diarios de este vehículo — se
+  // recalcula solo (nunca se edita a mano) cada vez que se crea/edita/
+  // elimina cualquiera de esos tres, ver utils/vehiculos.ts. null =
+  // todavía no se registró ninguno.
+  kilometrajeActual Int?
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  cargasCombustible   CargaCombustible[]
+  mantenimientos      MantenimientoVehiculo[]
+  usos                UsoVehiculo[]
+  planesMantenimiento PlanMantenimientoVehiculo[]
+}
+
+// Catálogo de marcas — se administra desde el formulario de Vehículos
+// (crear uno nuevo si no está en la lista), nunca se escribe a mano al
+// cargar un vehículo puntual. Ver el comentario de "Vehiculo.marcaId".
+model MarcaVehiculo {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  modelos   ModeloVehiculo[]
+  vehiculos Vehiculo[]
+}
+
+// Catálogo de modelos, siempre bajo una marca (ej. "Luv Dmax" bajo
+// "Chevrolet") — el formulario de Vehículos primero pide la marca y recién
+// ahí muestra/permite agregar modelos de ESA marca, para no mezclar modelos
+// de fabricantes distintos.
+model ModeloVehiculo {
+  id      Int           @id @default(autoincrement())
+  marcaId Int
+  marca   MarcaVehiculo @relation(fields: [marcaId], references: [id])
+  nombre  String
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  vehiculos Vehiculo[]
+
+  // Un mismo nombre de modelo SÍ puede repetirse entre marcas distintas
+  // (ej. casi nunca pasa, pero no hay razón para prohibirlo) — lo que no
+  // tiene sentido es agregarlo dos veces bajo la MISMA marca.
+  @@unique([marcaId, nombre])
+}
+
+enum EstadoUsoVehiculo {
+  EN_USO
+  FINALIZADO
+}
+
+// El corazón del módulo: un técnico "abre" un vehículo al empezar su día
+// (elige cuál va a usar + el kilometraje que marca el odómetro en ese
+// momento) y lo "cierra" al terminar (kilometraje final) — mismo patrón de
+// apertura/cierre que CajaSesion, pero para un vehículo en vez de una caja,
+// ver routes/vehiculos.ts (abrir/cerrar) y AppMovil (donde el técnico lo
+// hace desde su celular). Reemplaza el concepto anterior de "responsable
+// fijo" del vehículo: cualquier técnico puede tomar cualquier vehículo
+// libre cualquier día — lo único que se conserva es este historial de usos.
+// Invariante de negocio (dos, reforzadas con sendos índices únicos
+// parciales agregados a mano en la migración, igual criterio que
+// CajaSesion — Prisma no soporta índices parciales en el DSL): como mucho
+// un UsoVehiculo EN_USO por vehículo a la vez (nadie más puede tomarlo
+// hasta que se cierre) y como mucho uno EN_USO por técnico a la vez (un
+// técnico no puede tener dos vehículos abiertos al mismo tiempo).
+model UsoVehiculo {
+  id Int @id @default(autoincrement())
+
+  vehiculoId Int
+  vehiculo   Vehiculo @relation(fields: [vehiculoId], references: [id])
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  kilometrajeInicial Int
+  fechaInicio        DateTime @default(now())
+
+  // Los dos quedan null mientras estado == EN_USO; se completan juntos al cerrar.
+  kilometrajeFinal Int?
+  fechaFin         DateTime?
+
+  estado        EstadoUsoVehiculo @default(EN_USO)
+  observaciones String?
+
+  // Control del estado del vehículo AL TOMARLO (inspección de entrega, ver
+  // POST /vehiculos/uso/abrir) — texto libre por cada rubro, no un
+  // checklist de booleanos: lo que importa es poder anotar "raspón en la
+  // puerta trasera derecha" o "llanta delantera izquierda gastada", no solo
+  // un sí/no. Todos opcionales (empleados que ya tenían un uso abierto
+  // antes de este cambio no los tienen cargados, y no se los va a completar
+  // retroactivamente). Se pide solo AL EMPEZAR el día — no hay un segundo
+  // juego de campos al cerrar, a diferencia de kilometraje.
+  golpesCarroceria    String?
+  vidrios             String?
+  llantas             String?
+  lucesVisibles       String?
+  accesorios          String?
+  llaves              String?
+  documentacion       String?
+  equiposHerramientas String?
+
+  createdAt DateTime @default(now())
+}
+
+// Una carga de combustible es un punto en el tiempo: qué marcaba el odómetro
+// EN ESE MOMENTO (no "kilometraje inicial/final" — el rendimiento entre dos
+// cargas se calcula al vuelo como la diferencia de kilometraje entre una
+// carga y la anterior del mismo vehículo, ver utils/vehiculos.ts) más cuánto
+// combustible entró y su costo.
+model CargaCombustible {
+  id         Int      @id @default(autoincrement())
+  vehiculoId Int
+  vehiculo   Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  fecha       DateTime @default(now())
+  kilometraje Int // lectura del odómetro al momento de esta carga
+
+  // Texto libre con sugerencias en el formulario (no un enum) — mismo
+  // criterio que CajaFibra.tipo: alcanza para lo que de verdad se despacha
+  // en una gasolinera ecuatoriana ("Extra", "Súper", "Ecopaís", "Diésel
+  // Premium", "Diésel 2") sin tener que mantener una lista cerrada.
+  tipoCombustible String  @default("EXTRA")
+  galones         Decimal @db.Decimal(8, 2)
+  costoTotal      Decimal @db.Decimal(10, 2)
+  gasolinera      String?
+  observaciones   String?
+
+  // Foto del comprobante de pago (factura/ticket de la gasolinera) — ruta
+  // relativa igual criterio que Pago.comprobanteUrl/Producto.imagenUrl, se
+  // sube junto con el resto del formulario (ver POST /vehiculos/:id/
+  // cargas-combustible en routes/vehiculos.ts). Opcional: no todas las
+  // gasolineras dan un comprobante físico fácil de fotografiar, y el
+  // técnico puede estar registrando la carga más tarde sin el papel a mano.
+  comprobanteUrl String?
+
+  // Quién registró la carga en el sistema — nullable porque si el usuario
+  // se llega a eliminar algún día, el registro histórico de la carga debe
+  // sobrevivir igual (mismo criterio que RespaldoMikrotik.usuarioId).
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum TipoMantenimientoVehiculo {
+  CAMBIO_ACEITE
+  CAMBIO_FILTRO_ACEITE
+  CAMBIO_FILTRO_AIRE
+  CAMBIO_PASTILLAS_FRENO
+  CAMBIO_LLANTAS
+  ALINEACION_BALANCEO
+  REVISION_GENERAL
+  OTRO
+}
+
+// Un mantenimiento realizado a un vehículo — mismo criterio de "kilometraje
+// como punto en el tiempo" que CargaCombustible, para poder responder
+// "¿cuántos km lleva desde el último cambio de aceite?" sin depender de que
+// alguien calcule la resta a mano.
+model MantenimientoVehiculo {
+  id         Int      @id @default(autoincrement())
+  vehiculoId Int
+  vehiculo   Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  tipo               TipoMantenimientoVehiculo
+  fecha              DateTime                  @default(now())
+  kilometraje        Int
+  costo              Decimal?                  @db.Decimal(10, 2)
+  taller             String?
+  // Obligatorio en el formulario solo cuando tipo = OTRO (ver
+  // VehiculosPage.tsx) — para el resto de tipos es un detalle opcional.
+  descripcion        String?
+  // A qué kilometraje conviene el próximo de este mismo tipo. Si el
+  // vehículo tiene un PlanMantenimientoVehiculo activo para este tipo, el
+  // backend lo calcula solo (kilometraje de ESTE mantenimiento +
+  // intervaloKm del plan) al guardar — ver POST /vehiculos/:id/
+  // mantenimientos; si no hay plan configurado, sigue siendo un campo
+  // manual/opcional como antes.
+  proximoKilometraje Int?
+
+  // Respaldo de que el mantenimiento realmente se hizo — mismo criterio que
+  // CargaCombustible.comprobanteUrl (ver ahí): número de factura como texto
+  // libre + foto opcional del comprobante, tomada con la cámara del celular
+  // si está disponible.
+  numeroFactura  String?
+  comprobanteUrl String?
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// Regla de mantenimiento preventivo por vehículo: cada cuántos kilómetros
+// toca un tipo de mantenimiento puntual (ej. cada 5000 km, cambiar las
+// pastillas de freno) y con cuántos km de anticipación avisar. Es la
+// "plantilla" que hace que MantenimientoVehiculo.proximoKilometraje se
+// calcule solo al guardar un mantenimiento nuevo de ese tipo (kilometraje
+// del mantenimiento + intervaloKm), en vez de tener que volver a escribirlo
+// cada vez — ver POST /vehiculos/:id/mantenimientos y GET /vehiculos/
+// alertas-mantenimiento (que compara el kilometraje actual del vehículo
+// contra este próximo esperado para avisar "PROXIMO"/"VENCIDO").
+model PlanMantenimientoVehiculo {
+  id         Int      @id @default(autoincrement())
+  vehiculoId Int
+  vehiculo   Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  tipo TipoMantenimientoVehiculo
+
+  intervaloKm   Int // cada cuántos km toca este mantenimiento
+  // Avisar cuando falten esta cantidad de km o menos para el próximo — el
+  // ejemplo real que motivó esto: "cada 5000 km cambio de pastillas,
+  // avisame cuando falten 200".
+  kmAvisoPrevio Int @default(500)
+
+  // Se puede "apagar" un plan sin perder el histórico de mantenimientos ya
+  // hechos de ese tipo — igual criterio que "activo" en el resto del
+  // sistema.
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Un solo plan vigente por (vehículo, tipo) — configurarlo de nuevo
+  // reemplaza al anterior (ver upsert en routes/vehiculos.ts), no se
+  // acumulan planes duplicados para el mismo tipo.
+  @@unique([vehiculoId, tipo])
+}
+
+// --- Módulo de LOCALIZACIÓN DE TÉCNICOS ---
+// Un punto GPS del celular de un técnico, capturado por la app móvil (ver
+// hooks/useUbicacionTecnico.ts en el frontend) cada ~2 minutos mientras
+// tiene la app abierta (no hay forma de rastrear con la app cerrada/el
+// celular bloqueado desde una PWA — eso solo lo haría una app nativa).
+// Append-only a propósito: cada lectura es una fila nueva, nunca se
+// sobreescribe una anterior — así queda el recorrido del día completo, no
+// solo la última posición (ver GET /ubicaciones-tecnicos/:empleadoId/
+// recorrido), y el punto "actual" de cada técnico es simplemente el de
+// fecha más reciente (ver GET /ubicaciones-tecnicos/actual).
+//
+// "fecha" es el momento REAL de la captura en el celular (lo manda el
+// cliente) — puede quedar en el pasado si el punto se guardó sin señal y
+// recién se subió al reconectarse (ver utils/colaUbicaciones.ts en el
+// frontend); "createdAt" es cuándo llegó de verdad al servidor, para poder
+// distinguir un backfill atrasado de una lectura en vivo si hiciera falta.
+//
+// Misma precisión que VisitaTecnica.latitudLlegada/longitudLlegada
+// (Decimal 9,6): es el mismo origen de dato (GPS del celular vía
+// navigator.geolocation), a diferencia de Cliente.latitud (Decimal 10,7,
+// pensado para coordenadas pegadas desde un link de Google Maps).
+model UbicacionTecnico {
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  latitud         Decimal  @db.Decimal(9, 6)
+  longitud        Decimal  @db.Decimal(9, 6)
+  // Radio de precisión que reporta el propio navigator.geolocation
+  // (GeolocationCoordinates.accuracy, en metros) — informativo, para poder
+  // desconfiar de una lectura con precisión pobre si hiciera falta más
+  // adelante. null si el navegador no lo reportó.
+  precisionMetros Decimal? @db.Decimal(8, 2)
+  fecha           DateTime
+  createdAt       DateTime @default(now())
+
+  // Las consultas siempre filtran por empleado y ordenan/acotan por fecha
+  // (última posición, recorrido del día) — este índice cubre ambas.
+  @@index([empleadoId, fecha])
+}
+
+// --- Módulo de EGRESOS DE BODEGA (despacho de equipos a un técnico) ---
+// Cierra la brecha que había entre "el equipo está EN_BODEGA" y "el equipo
+// quedó ENTREGADO a un cliente" (ver EstadoNumeroSerie): a primera hora del
+// día, bodega arma un documento con los equipos puntuales (por número de
+// serie) que le está dando a un técnico para que lleve a sus visitas —
+// típicamente pensando en un cliente puntual (ej. "el cliente A necesita un
+// router nuevo"), aunque eso queda como referencia informativa nada más
+// (clienteDestinoId): el técnico puede terminar instalándolo en OTRA visita,
+// o devolviéndolo sin usar, y este documento no lo impide.
+//
+// A propósito NO mueve Producto.stockActual ni genera MovimientoInventario:
+// mismo criterio que "entregar"/"regresar a bodega" en routes/productos.ts
+// (ver el comentario largo en el modelo NumeroSerieProducto) — el stock real
+// de la empresa ya se contabilizó en la Compra que trajo la unidad, y se
+// volverá a tocar recién si/cuando esa unidad entra en una Factura/NotaVenta
+// real. Este documento es una bitácora de CUSTODIA física (quién tiene cada
+// unidad ahora mismo), en paralelo al stock, no una transacción de
+// inventario — mismo espíritu que EquipoDejadoVisita.
+model EgresoBodega {
+  id Int @id @default(autoincrement())
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  // Puramente informativo — ver el comentario de arriba.
+  clienteDestinoId Int?
+  clienteDestino   Cliente? @relation(fields: [clienteDestinoId], references: [id])
+
+  // Quién armó el documento (la bodeguera/admin) — nullable por el mismo
+  // criterio de "sobrevive si el usuario se llega a eliminar" que el resto
+  // del sistema.
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  observaciones String?
+  createdAt     DateTime @default(now())
+
+  detalles EgresoBodegaDetalle[]
+}
+
+enum EstadoEgresoBodegaDetalle {
+  // Con el técnico, todavía sin resolver (ni instalado en un cliente, ni
+  // devuelto).
+  EN_TRANSITO
+  // Se confirmó la entrega a un cliente — normalmente desde el acta de una
+  // visita (ver PATCH /visitas/:id/detalle-trabajo), que en el mismo paso
+  // deja el NumeroSerieProducto asociado en ENTREGADO.
+  ENTREGADO
+  // El técnico no lo usó y lo devolvió físicamente a bodega (ver PATCH
+  // /egresos-bodega/detalles/:id/devolver), que deja el NumeroSerieProducto
+  // asociado de vuelta en EN_BODEGA.
+  DEVUELTO
+}
+
+// Una línea de un EgresoBodega: UN número de serie puntual. El estado de
+// esta línea sigue al mismo ritmo que NumeroSerieProducto.estado para ESA
+// unidad mientras estuvo bajo ESTE despacho — se lee para saber "¿este
+// egreso puntual ya se resolvió, o el técnico todavía tiene algo pendiente?"
+// sin tener que inferirlo del estado actual (más volátil) del serial.
+model EgresoBodegaDetalle {
+  id       Int          @id @default(autoincrement())
+  egresoId Int
+  egreso   EgresoBodega @relation(fields: [egresoId], references: [id])
+
+  numeroSerieProductoId Int
+  numeroSerieProducto   NumeroSerieProducto @relation(fields: [numeroSerieProductoId], references: [id])
+
+  estado EstadoEgresoBodegaDetalle @default(EN_TRANSITO)
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================================
+// Centro de Control — monitoreo de red, soporte al cliente y control interno
+// ============================================================================
+
+// Historial de la señal óptica de cada ONU. OltOnu.rxPowerDbm es solo un
+// caché del ÚLTIMO dato leído; sin historial no hay forma de ver que una
+// fibra se viene degradando (conector sucio, curvatura, empalme flojo) antes
+// de que el cliente se quede sin servicio. sincronizarOlt (routes/olts.ts)
+// guarda como máximo UNA lectura por hora por ONU — el polling corre cada
+// pocos minutos y guardar todas llenaría la tabla sin aportar nada — y el job
+// jobs/monitoreoRed.ts borra las de más de DIAS_RETENCION_LECTURAS días.
+model LecturaSenalOnu {
+  id         Int      @id @default(autoincrement())
+  oltOnuId   Int
+  oltOnu     OltOnu   @relation(fields: [oltOnuId], references: [id])
+  rxPowerDbm Decimal  @db.Decimal(6, 2)
+  fecha      DateTime @default(now())
+
+  @@index([oltOnuId, fecha])
+}
+
+// Problema de red detectado automáticamente (ver utils/monitoreoRed.ts):
+//  - CORTE_MASIVO: varias ONUs del MISMO puerto PON pasaron a OFFLINE a la
+//    vez — casi siempre un corte de fibra o un splitter, no N problemas de
+//    clientes sueltos. Se identifica por puerto PON (oltId/slot/puerto)
+//    porque es el agrupamiento físico real del árbol de fibra.
+//  - SENAL_DEGRADADA: una ONU puntual con señal bajo el umbral crítico o que
+//    perdió varios dB respecto a su propio promedio de los días anteriores.
+// Mientras una alerta sigue abierta (fechaFin null) no se crea otra igual
+// para el mismo puerto/ONU — así un corte no genera un aviso cada 5 minutos.
+model AlertaRed {
+  id       Int    @id @default(autoincrement())
+  tipo     String // "CORTE_MASIVO" | "SENAL_DEGRADADA"
+  oltId    Int
+  olt      Olt    @relation(fields: [oltId], references: [id])
+  slot     Int
+  puerto   Int
+  // Solo para SENAL_DEGRADADA (una ONU puntual); null en CORTE_MASIVO.
+  oltOnuId Int?
+
+  cantidadAfectadas  Int       @default(1)
+  mensaje            String
+  fechaInicio        DateTime  @default(now())
+  // null = sigue abierta. Se cierra sola cuando el puerto se recupera / la
+  // señal vuelve a niveles normales, o a mano desde el Centro de Control.
+  fechaFin           DateTime?
+  cerradaManualmente Boolean   @default(false)
+
+  tickets TicketSoporte[]
+
+  @@index([oltId, slot, puerto, tipo])
+}
+
+enum EstadoTicket {
+  ABIERTO
+  EN_PROCESO
+  RESUELTO
+  CANCELADO
+}
+
+// Ticket de soporte: un reclamo/pedido de un cliente, desde que entra
+// (WhatsApp, llamada, en persona) hasta que se resuelve — con tiempos para
+// medir cuánto se tarda en atender (ver utils/tickets.ts, SLA por
+// prioridad). Si hace falta ir a la casa del cliente, se vincula con la
+// VisitaTecnica creada para eso.
+model TicketSoporte {
+  id Int @id @default(autoincrement())
+
+  clienteId      Int?
+  cliente        Cliente? @relation(fields: [clienteId], references: [id])
+  // Se guardan aparte de Cliente a propósito: un ticket por WhatsApp puede
+  // llegar de un número que todavía no está vinculado a ningún cliente.
+  nombreContacto String
+  telefono       String?
+
+  canal     String // "WHATSAPP" | "LLAMADA" | "PRESENCIAL" | "SISTEMA"
+  categoria String // "SIN_SERVICIO" | "LENTITUD" | "INTERMITENCIA" | "FACTURACION" | "CAMBIO_PLAN" | "TRASLADO" | "OTRO"
+  prioridad String       @default("MEDIA") // "BAJA" | "MEDIA" | "ALTA"
+  asunto    String
+  estado    EstadoTicket @default(ABIERTO)
+
+  asignadoEmpleadoId Int?
+  asignadoEmpleado   Empleado? @relation(fields: [asignadoEmpleadoId], references: [id])
+
+  visitaTecnicaId Int?           @unique
+  visitaTecnica   VisitaTecnica? @relation(fields: [visitaTecnicaId], references: [id])
+
+  // Ticket creado a raíz de una alerta de red (ej. cliente que llama durante
+  // un corte masivo ya detectado) — sirve para cerrar todos juntos.
+  alertaRedId Int?
+  alertaRed   AlertaRed? @relation(fields: [alertaRedId], references: [id])
+
+  solucion String?
+
+  creadoPorUsuarioId Int?
+  creadoPorUsuario   Usuario? @relation(fields: [creadoPorUsuarioId], references: [id])
+
+  createdAt            DateTime  @default(now())
+  fechaPrimeraAtencion DateTime? // primera vez que pasó a EN_PROCESO
+  fechaResolucion      DateTime? // RESUELTO o CANCELADO
+
+  mensajes MensajeTicket[]
+
+  @@index([estado])
+  @@index([telefono])
+}
+
+// Conversación/bitácora de un ticket: mensajes que llegan del cliente por
+// WhatsApp (autor CLIENTE) y notas internas del personal (autor USUARIO).
+model MensajeTicket {
+  id        Int           @id @default(autoincrement())
+  ticketId  Int
+  ticket    TicketSoporte @relation(fields: [ticketId], references: [id])
+  autor     String // "CLIENTE" | "USUARIO" | "SISTEMA"
+  texto     String
+  usuarioId Int?
+  usuario   Usuario?      @relation(fields: [usuarioId], references: [id])
+  createdAt DateTime      @default(now())
+}
+
+// Encuesta de satisfacción enviada por WhatsApp al cliente después de una
+// visita técnica (ver jobs/encuestaVisitas.ts). La respuesta (1 a 5) llega
+// por el webhook de WhatsApp (routes/whatsappWebhook.ts) y queda ligada a la
+// visita — y por ella al técnico que la hizo.
+model EncuestaVisita {
+  id           Int           @id @default(autoincrement())
+  visitaId     Int           @unique
+  visita       VisitaTecnica @relation(fields: [visitaId], references: [id])
+  telefono     String // ya normalizado (E.164 sin "+"), para cruzar con la respuesta
+  enviadaEn    DateTime      @default(now())
+  calificacion Int? // 1..5 — null = todavía no respondió
+  comentario   String?
+  respondidaEn DateTime?
+
+  @@index([telefono])
+}
+
+// Historial de suspensiones/reactivaciones del servicio de internet. El
+// Mikrotik solo sabe el estado ACTUAL (está o no en la address-list
+// "Suspendido"); sin esto no hay forma de saber qué clientes caen en
+// suspensión mes tras mes. Solo se registra cuando el estado CAMBIA de
+// verdad (suspenderClientePorIp/reactivarClientePorIp devuelven si hubo
+// cambio), nunca en cada pasada idempotente del job.
+model EventoServicioInternet {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  tipo      String // "SUSPENDIDO" | "REACTIVADO"
+  origen    String // "AUTOMATICO" | "MANUAL"
+  fecha     DateTime @default(now())
+
+  @@index([clienteId, fecha])
+  @@index([fecha])
 }

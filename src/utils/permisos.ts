@@ -30,12 +30,22 @@ export const PERMISOS = [
   { clave: "retenciones", etiqueta: "Retenciones", descripcion: "Generar comprobantes de retención, enviarlos al SRI y descargar el RIDE", categoria: "Contabilidad" },
   { clave: "nomina", etiqueta: "Nómina (ver)", descripcion: "Ver empleados, roles de pago, décimos, vacaciones, utilidades y liquidaciones", categoria: "Personal Técnico" },
   { clave: "nomina_editar", etiqueta: "Nómina (editar)", descripcion: "Crear/editar empleados, generar y pagar roles de pago, calcular décimos/vacaciones/utilidades/liquidaciones", categoria: "Personal Técnico" },
+  { clave: "vehiculos", etiqueta: "Vehículos (ver)", descripcion: "Ver el catálogo de vehículos de la empresa, quién tiene cada uno en uso hoy y su historial de uso diario, cargas de combustible y mantenimientos", categoria: "Personal Técnico" },
+  { clave: "vehiculos_editar", etiqueta: "Vehículos (editar)", descripcion: "Crear/editar vehículos y su catálogo de marca/modelo, configurar los planes de mantenimiento preventivo, corregir/eliminar cargas y mantenimientos ya registrados, y forzar el cierre de un uso diario si el técnico se olvidó — registrar una carga o un mantenimiento nuevo no exige este permiso, cualquier técnico puede hacerlo desde el celular", categoria: "Personal Técnico" },
   { clave: "visitas", etiqueta: "Visitas técnicas (ver)", descripcion: "Ver todas las rutas de visita planificadas", categoria: "Personal Técnico" },
   { clave: "visitas_editar", etiqueta: "Visitas técnicas (editar)", descripcion: "Planificar rutas de visita para el personal técnico", categoria: "Personal Técnico" },
   { clave: "reportes", etiqueta: "Reportes", descripcion: "Acceso a todos los reportes", categoria: "Reportes" },
   { clave: "auditoria", etiqueta: "Auditoría", descripcion: "Ver la bitácora de auditoría", categoria: "Administración" },
   { clave: "configuracion", etiqueta: "Configuración de la empresa", descripcion: "Logo, respaldo de comprobantes, datos de empresa, certificado", categoria: "Administración" },
   { clave: "mikrotik", etiqueta: "Control de red (Mikrotik)", descripcion: "Ver clientes conectados, suspender/reactivar acceso, gestionar cuentas PPPoE, planes de ancho de banda y el catálogo de planes de internet", categoria: "Red / ISP" },
+  { clave: "olt", etiqueta: "Control de OLT", descripcion: "Ver el catálogo de OLT Huawei, sincronizar su tabla de ONUs por SNMP, consultar un puerto GPON puntual por SSH (señal, temperatura, distancia) y vincular ONUs con clientes", categoria: "Red / ISP" },
+  { clave: "mapa_red", etiqueta: "Mapa de Red", descripcion: "Ver el mapa de clientes con su estado de conexión (ping, OLT, nodo) — pensado para la sala de soporte técnico", categoria: "Red / ISP" },
+  { clave: "ubicacion_tecnicos", etiqueta: "Localización de Técnicos", descripcion: "Ver el mapa en vivo de dónde está cada técnico (según el GPS de su celular), qué vehículo tiene en uso y el recorrido del día", categoria: "Red / ISP" },
+  { clave: "switches", etiqueta: "Switches TP-Link (clientes)", descripcion: "Ver el switch TP-Link instalado en el domicilio de cada cliente, sincronizar el estado de sus puertos por SNMP (up/down, tráfico, PoE)", categoria: "Red / ISP" },
+  { clave: "red_fisica", etiqueta: "Red Física (ver)", descripcion: "Ver el mapa de trazado de fibra: cajas/NAP y los tramos de cable entre ellas", categoria: "Red / ISP" },
+  { clave: "centro_control", etiqueta: "Centro de Control", descripcion: "Ver alertas de red (cortes masivos, señal degradada), visitas sospechosas, cuadre de material por técnico, equipos sin recuperar, anomalías de combustible, indicadores del negocio y encuestas de satisfacción", categoria: "Red / ISP" },
+  { clave: "tickets", etiqueta: "Tickets de soporte", descripcion: "Atender los reclamos de clientes (llamadas, WhatsApp): crear, asignar, responder, agendar visita y resolver tickets", categoria: "Red / ISP" },
+  { clave: "red_fisica_editar", etiqueta: "Red Física (editar)", descripcion: "Dibujar/editar cajas y tramos de fibra en el mapa de Red Física", categoria: "Red / ISP" },
 ] as const;
 
 export type PermisoClave = (typeof PERMISOS)[number]["clave"];

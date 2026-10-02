@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { Prisma, EstadoFactura, EstadoPago } from "@prisma/client";
 import { datosEmisorDeEmpresa, rutaAbsoluta } from "../utils/empresas";
 import { obtenerUrlsSri } from "../utils/sriEndpoints";
 import { generarClaveAcceso } from "../utils/claveAcceso";
@@ -343,6 +343,30 @@ facturasRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.FacturaWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador de la pantalla "Facturas emitidas": texto libre contra número
+    // de factura, cliente (razón social o cédula/RUC) y clave de acceso, más
+    // filtros opcionales por estado SRI y estado de pago. Todo del lado del
+    // servidor para que funcione junto con la paginación (buscar solo en la
+    // página visible no encontraría facturas viejas).
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (q) {
+      where.OR = [
+        { secuencial: { contains: q, mode: "insensitive" } },
+        { claveAcceso: { contains: q } },
+        { cliente: { razonSocial: { contains: q, mode: "insensitive" } } },
+        { cliente: { identificacion: { contains: q } } },
+      ];
+    }
+    const estado = req.query.estado;
+    if (typeof estado === "string" && (Object.values(EstadoFactura) as string[]).includes(estado)) {
+      where.estado = estado as EstadoFactura;
+    }
+    const estadoPago = req.query.estadoPago;
+    if (typeof estadoPago === "string" && (Object.values(EstadoPago) as string[]).includes(estadoPago)) {
+      where.estadoPago = estadoPago as EstadoPago;
+    }
+
     const opciones = {
       where,
       include: {
@@ -357,11 +381,17 @@ facturasRouter.get("/", async (req: Request, res: Response) => {
       return res.json(facturas);
     }
 
-    const [facturas, total] = await Promise.all([
+    // "resumen": suma de lo que devuelve el filtro actual (sin anuladas, que
+    // no cuentan como venta) — para el pie del listado.
+    const [facturas, total, suma] = await Promise.all([
       prisma.factura.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
       prisma.factura.count({ where }),
+      prisma.factura.aggregate({ where: { AND: [where, { estado: { not: EstadoFactura.ANULADA } }] }, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(facturas, total, paginacion));
+    res.json({
+      ...respuestaPaginada(facturas, total, paginacion),
+      resumen: { cantidadVigentes: suma._count, totalVigentes: suma._sum.total ?? new Prisma.Decimal(0) },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar facturas" });
@@ -1060,6 +1090,15 @@ facturasRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (re
     // Todo pasa en una sola transacción: o se devuelve el stock de TODOS
     // los productos y se anula la factura, o no pasa nada de nada.
     const facturaAnulada = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Guardia atómica PRIMERO, antes de tocar stock: el chequeo de estado
+      // de arriba se hizo fuera de la transacción, así que un doble clic (o
+      // dos peticiones concurrentes) podría pasar esa validación dos veces.
+      // Si el updateMany no afecta ninguna fila es porque otra petición ya
+      // anuló esta factura primero — se aborta ACÁ, antes del bucle, para
+      // que el stock nunca se devuelva dos veces.
+      const guardia = await tx.factura.updateMany({ where: { id, estado: "CREADA" }, data: { estado: "ANULADA" } });
+      if (guardia.count === 0) throw new Error("FACTURA_YA_NO_ANULABLE");
+
       for (const detalle of factura.detalles) {
         await tx.producto.update({
           where: { id: detalle.productoId },
@@ -1089,8 +1128,6 @@ facturasRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (re
         });
       }
 
-      const anulada = await tx.factura.update({ where: { id }, data: { estado: "ANULADA" } });
-
       await revertirAsientoDeOrigen(tx, "FACTURA", id, req.usuario!.usuarioId);
 
       await registrarAuditoria(tx, {
@@ -1101,11 +1138,14 @@ facturasRouter.patch("/:id/anular", requirePermiso("facturas_anular"), async (re
         detalle: `Factura ${factura.secuencial}`,
       });
 
-      return anulada;
+      return tx.factura.findUniqueOrThrow({ where: { id } });
     });
 
     res.json({ mensaje: "Factura anulada y stock devuelto", factura: facturaAnulada });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "FACTURA_YA_NO_ANULABLE") {
+      return res.status(409).json({ error: "Esta factura ya no está en estado CREADA (alguien más la anuló, o cambió de estado, mientras tanto)" });
+    }
     console.error(error);
     res.status(500).json({ error: "Error al anular la factura" });
   }

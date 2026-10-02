@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, empresaActiva } from "../db";
-import { Prisma } from "@prisma/client";
+import { leerBusqueda, leerEnum, contiene, resumenListado } from "../utils/busquedaListado";
+import { Prisma, EstadoFactura } from "@prisma/client";
 import { datosEmisorDeEmpresa, rutaAbsoluta } from "../utils/empresas";
 import { obtenerUrlsSri } from "../utils/sriEndpoints";
 import { generarClaveAcceso } from "../utils/claveAcceso";
@@ -125,6 +126,23 @@ notasCreditoRouter.get("/", async (req: Request, res: Response) => {
     const paginacion = leerPaginacion(req);
     const rango = leerRangoFechas(req);
     const where: Prisma.NotaCreditoWhereInput = rango ? { fechaEmision: rango } : {};
+
+    // Buscador: número, clave de acceso, motivo, factura que modifica y
+    // cliente de esa factura (razón social o cédula/RUC); filtro por estado SRI.
+    const q = leerBusqueda(req);
+    if (q) {
+      where.OR = [
+        { secuencial: contiene(q) },
+        { claveAcceso: { contains: q } },
+        { motivo: contiene(q) },
+        { factura: { secuencial: contiene(q) } },
+        { factura: { cliente: { razonSocial: contiene(q) } } },
+        { factura: { cliente: { identificacion: { contains: q } } } },
+      ];
+    }
+    const estado = leerEnum(req, "estado", EstadoFactura);
+    if (estado) where.estado = estado;
+
     const opciones = {
       where,
       include: { factura: { include: { cliente: true } } },
@@ -136,11 +154,12 @@ notasCreditoRouter.get("/", async (req: Request, res: Response) => {
       return res.json(notas);
     }
 
-    const [notas, total] = await Promise.all([
+    const [notas, total, suma] = await Promise.all([
       prisma.notaCredito.findMany({ ...opciones, skip: paginacion.skip, take: paginacion.take }),
       prisma.notaCredito.count({ where }),
+      prisma.notaCredito.aggregate({ where: { AND: [where, { estado: { not: EstadoFactura.ANULADA } }] }, _sum: { total: true }, _count: true }),
     ]);
-    res.json(respuestaPaginada(notas, total, paginacion));
+    res.json({ ...respuestaPaginada(notas, total, paginacion), resumen: resumenListado(suma) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al listar notas de crédito" });

@@ -611,6 +611,7 @@ model Cliente {
   // Centro de Control (ver routes/centroControl.ts y routes/tickets.ts).
   ticketsSoporte          TicketSoporte[]
   eventosServicioInternet EventoServicioInternet[]
+  contratosServicio       ContratoServicio[]
 
   createdAt DateTime @default(now())
 }
@@ -2384,6 +2385,9 @@ model VisitaTecnica {
   // la encuesta de satisfacción enviada al cliente por WhatsApp después.
   ticketSoporte TicketSoporte?
   encuesta      EncuestaVisita?
+  // Contrato del servicio firmado por el cliente en el celular del técnico
+  // (ver routes/contratos.ts).
+  contrato      ContratoServicio?
 }
 
 enum TipoTrabajoVisita {
@@ -3081,4 +3085,34 @@ model ChequeoNodo {
   fecha      DateTime @default(now())
 
   @@index([nodoId, fecha])
+}
+
+// Contrato de prestación del servicio de internet firmado por el cliente en
+// la pantalla del celular del técnico, al terminar la instalación. El PDF
+// (texto de la plantilla de Ajustes + datos del plan + equipos entregados en
+// comodato + la firma) se guarda en la carpeta de uploads de la empresa. Es
+// el respaldo de lo pactado: vigencia mínima, precio y equipos que el cliente
+// debe devolver si se da de baja. Ver utils/contratoServicio.ts.
+model ContratoServicio {
+  id        Int            @id @default(autoincrement())
+  clienteId Int
+  cliente   Cliente        @relation(fields: [clienteId], references: [id])
+  visitaId  Int?           @unique
+  visita    VisitaTecnica? @relation(fields: [visitaId], references: [id])
+
+  pdfUrl         String
+  nombreFirmante String
+  cedulaFirmante String
+  // Datos pactados al momento de firmar (copiados: si el plan cambia
+  // después, el contrato sigue diciendo lo que se firmó).
+  plan           String
+  precioMensual  Decimal  @db.Decimal(10, 2)
+  vigenciaMeses  Int?
+  latitud        Decimal? @db.Decimal(9, 6)
+  longitud       Decimal? @db.Decimal(9, 6)
+
+  registradoPorUsuarioId Int?
+  fecha                  DateTime @default(now())
+
+  @@index([clienteId])
 }

@@ -28,7 +28,15 @@ const puedeEditar = requirePermiso("visitas_editar");
 
 const INCLUDE_RUTA = {
   empleado: { select: SELECT_EMPLEADO_SEGURO },
-  visitas: { orderBy: { orden: "asc" as const }, include: { cliente: true, equiposDejados: true, materialesUtilizados: true } },
+  visitas: {
+    orderBy: { orden: "asc" as const },
+    include: {
+      cliente: true,
+      equiposDejados: true,
+      materialesUtilizados: true,
+      contrato: { select: { id: true, pdfUrl: true, fecha: true, nombreFirmante: true } },
+    },
+  },
 } as const;
 
 // --- Fotos del acta de instalación (PATCH /:id/detalle-trabajo) ---
@@ -541,7 +549,7 @@ class MetrosInsuficientesError extends Error {}
 // Confirma que quien llama puede tocar esta visita: o es ADMIN/tiene
 // visitas_editar (corrección administrativa), o es el técnico dueño de la
 // ruta (vía Usuario.empleadoId) — nunca un tercero cualquiera.
-async function puedeTocarVisita(req: Request, visitaId: number): Promise<{ ok: boolean; visita?: any }> {
+export async function puedeTocarVisita(req: Request, visitaId: number): Promise<{ ok: boolean; visita?: any }> {
   const visita = await prisma.visitaTecnica.findUnique({ where: { id: visitaId }, include: { rutaVisita: true } });
   if (!visita) return { ok: false };
   if (req.usuario!.rol === "ADMIN") return { ok: true, visita };

@@ -74,6 +74,7 @@ import { centroControlRouter } from "./routes/centroControl";
 import { ticketsRouter } from "./routes/tickets";
 import { conciliacionBancariaRouter } from "./routes/conciliacionBancaria";
 import { portalRouter } from "./routes/portal";
+import { contratosRouter } from "./routes/contratos";
 import { iniciarMonitoreoRed } from "./jobs/monitoreoRed";
 import { iniciarEncuestaVisitas } from "./jobs/encuestaVisitas";
 import { iniciarMonitoreoNodos } from "./jobs/monitoreoNodos";
@@ -242,6 +243,9 @@ app.use("/centro-control", requireAuth, requirePermiso("centro_control"), centro
 app.use("/tickets", requireAuth, requirePermiso("tickets"), ticketsRouter);
 // Conciliación del extracto bancario con los cobros de internet — mismo
 // permiso que Facturación de Internet, que es donde se cobra a mano.
+// Contrato firmado en el celular del técnico: sin permiso a nivel de router —
+// firma quien puede llenar el acta de esa visita (ver routes/contratos.ts).
+app.use("/contratos", requireAuth, contratosRouter);
 app.use("/conciliacion-bancaria", requireAuth, requirePermiso("mikrotik"), conciliacionBancariaRouter);
 
 const PORT = process.env.PORT || 3000;

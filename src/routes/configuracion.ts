@@ -25,11 +25,13 @@ import {
   actualizarEmpresa,
   actualizarCertificadoEmpresa,
   actualizarWhatsappEmpresa,
+  actualizarTextoContratoEmpresa,
   whatsappConfigurado,
   cicloCorteInternet,
   type DatosEditablesEmpresa,
   type DatosWhatsappEmpresa,
 } from "../utils/empresas";
+import { TEXTO_CONTRATO_POR_DEFECTO } from "../utils/contratoServicio";
 import { registrarAuditoria } from "../utils/auditoria";
 import { invalidarCacheExpiracionCertificado } from "../utils/certificado";
 import { ejecutarBackupDeEmpresa, estadoBackup, backupAtrasado } from "../utils/backupBaseDatos";
@@ -382,6 +384,27 @@ configuracionRouter.post("/certificado", requirePermiso("configuracion"), subirC
   actualizarCertificadoEmpresa(empresaActivaId(), password);
   invalidarCacheExpiracionCertificado(empresaActivaId());
   res.json({ mensaje: "Certificado actualizado" });
+});
+
+// GET /configuracion/contrato — cláusulas del contrato de internet que se
+// firma en el celular del técnico (ver utils/contratoServicio.ts).
+configuracionRouter.get("/contrato", (_req: Request, res: Response) => {
+  const empresa = empresaActiva();
+  res.json({ texto: empresa.textoContratoInternet || TEXTO_CONTRATO_POR_DEFECTO, personalizado: !!empresa.textoContratoInternet, textoPorDefecto: TEXTO_CONTRATO_POR_DEFECTO });
+});
+
+// PUT /configuracion/contrato  Body: { texto } — vacío vuelve al texto por defecto.
+configuracionRouter.put("/contrato", requirePermiso("configuracion"), (req: Request, res: Response) => {
+  const texto = typeof req.body?.texto === "string" ? req.body.texto.slice(0, 20000) : "";
+  const textoFinal = texto.trim() === TEXTO_CONTRATO_POR_DEFECTO.trim() ? "" : texto;
+  const actualizada = actualizarTextoContratoEmpresa(empresaActivaId(), textoFinal || null);
+  registrarAuditoria(prisma, {
+    usuarioId: req.usuario!.usuarioId,
+    accion: "EDITAR_TEXTO_CONTRATO",
+    entidad: "Empresa",
+    detalle: textoFinal ? "Texto del contrato de internet personalizado" : "Texto del contrato de internet restablecido al por defecto",
+  }).catch((error) => console.error("No se pudo registrar la auditoría de EDITAR_TEXTO_CONTRATO:", error));
+  res.json({ texto: actualizada.textoContratoInternet || TEXTO_CONTRATO_POR_DEFECTO, personalizado: !!actualizada.textoContratoInternet, textoPorDefecto: TEXTO_CONTRATO_POR_DEFECTO });
 });
 
 // GET /configuracion/whatsapp

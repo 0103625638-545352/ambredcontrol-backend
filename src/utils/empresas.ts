@@ -96,6 +96,10 @@ export interface EmpresaConfig {
   // nombre del técnico; el texto debe pedir responder con un número del 1 al
   // 5. undefined = no se mandan encuestas (el resto de WhatsApp sigue igual).
   whatsappTemplateEncuesta?: string;
+  // Texto (cláusulas) del contrato de servicio de internet que el cliente
+  // firma en el celular del técnico — ver utils/contratoServicio.ts.
+  // undefined = se usa TEXTO_CONTRATO_POR_DEFECTO.
+  textoContratoInternet?: string;
   activa: boolean;
   createdAt: string;
 }
@@ -229,6 +233,17 @@ export interface DatosWhatsappEmpresa {
 // Setter propio, mismo criterio que actualizarCertificadoEmpresa: son
 // credenciales de una cuenta de Meta, no datos de negocio comunes como los
 // que ya cubre DatosEditablesEmpresa.
+// Setter propio del texto del contrato de internet (ver Ajustes): "" o null
+// vuelve a la plantilla por defecto.
+export function actualizarTextoContratoEmpresa(id: string, texto: string | null): EmpresaConfig {
+  const empresas = leerRegistryCrudo();
+  const indice = empresas.findIndex((e) => e.id === id);
+  if (indice === -1) throw new Error(`Empresa no encontrada: "${id}"`);
+  empresas[indice] = { ...empresas[indice], textoContratoInternet: texto?.trim() ? texto : undefined };
+  guardarRegistryCrudo(empresas);
+  return empresas[indice];
+}
+
 export function actualizarWhatsappEmpresa(id: string, datos: DatosWhatsappEmpresa): EmpresaConfig {
   const empresas = leerRegistryCrudo();
   const indice = empresas.findIndex((e) => e.id === id);

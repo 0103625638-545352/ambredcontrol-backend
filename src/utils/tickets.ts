@@ -6,7 +6,7 @@ import { prisma } from "../db";
 import { normalizarTelefonoEcuador } from "./whatsapp";
 import { interpretarCalificacion, type PrioridadTicket } from "./controlInterno";
 
-export const CANALES_TICKET = ["WHATSAPP", "LLAMADA", "PRESENCIAL", "SISTEMA"] as const;
+export const CANALES_TICKET = ["WHATSAPP", "LLAMADA", "PRESENCIAL", "SISTEMA", "PORTAL"] as const;
 export const CATEGORIAS_TICKET = ["SIN_SERVICIO", "LENTITUD", "INTERMITENCIA", "FACTURACION", "CAMBIO_PLAN", "TRASLADO", "OTRO"] as const;
 
 // Clasificación automática de un mensaje entrante — solo una primera

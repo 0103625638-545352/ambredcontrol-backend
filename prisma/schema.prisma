@@ -2986,7 +2986,7 @@ model TicketSoporte {
   nombreContacto String
   telefono       String?
 
-  canal     String // "WHATSAPP" | "LLAMADA" | "PRESENCIAL" | "SISTEMA"
+  canal     String // "WHATSAPP" | "LLAMADA" | "PRESENCIAL" | "SISTEMA" | "PORTAL"
   categoria String // "SIN_SERVICIO" | "LENTITUD" | "INTERMITENCIA" | "FACTURACION" | "CAMBIO_PLAN" | "TRASLADO" | "OTRO"
   prioridad String       @default("MEDIA") // "BAJA" | "MEDIA" | "ALTA"
   asunto    String

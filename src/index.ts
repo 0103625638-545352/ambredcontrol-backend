@@ -73,6 +73,7 @@ import { whatsappWebhookRouter } from "./routes/whatsappWebhook";
 import { centroControlRouter } from "./routes/centroControl";
 import { ticketsRouter } from "./routes/tickets";
 import { conciliacionBancariaRouter } from "./routes/conciliacionBancaria";
+import { portalRouter } from "./routes/portal";
 import { iniciarMonitoreoRed } from "./jobs/monitoreoRed";
 import { iniciarEncuestaVisitas } from "./jobs/encuestaVisitas";
 import { iniciarMonitoreoNodos } from "./jobs/monitoreoNodos";
@@ -190,6 +191,10 @@ app.use("/marcaciones", marcacionesRouter);
 // lo llama Meta directamente, nunca el frontend. Se autentica con su propio
 // mecanismo (verify_token en la verificación GET, ver routes/whatsappWebhook.ts).
 app.use("/whatsapp-webhook", whatsappWebhookRouter);
+// Portal del cliente: SIN requireAuth — lo usan los clientes de internet, que
+// no tienen cuenta de usuario. Tiene su propia sesión (token firmado con otro
+// secreto, que requireAuth rechaza) y límite de intentos, ver routes/portal.ts.
+app.use("/portal", portalRouter);
 // Visitas técnicas: requireAuth a nivel de router (todas sus rutas lo
 // necesitan) — cada ruta interna aplica su propio puedeVer("visitas")/
 // puedeEditar("visitas_editar") donde corresponde; GET /mi-ruta-hoy y los

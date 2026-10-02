@@ -74,6 +74,7 @@ import { centroControlRouter } from "./routes/centroControl";
 import { ticketsRouter } from "./routes/tickets";
 import { iniciarMonitoreoRed } from "./jobs/monitoreoRed";
 import { iniciarEncuestaVisitas } from "./jobs/encuestaVisitas";
+import { iniciarMonitoreoNodos } from "./jobs/monitoreoNodos";
 import { obtenerEmpresa, rutaAbsoluta, sembrarEmpresaPrincipalSiHaceFalta, listarEmpresas } from "./utils/empresas";
 import { cifrarCredencialesExistentes } from "./db";
 import { cifradoActivo } from "./utils/cifrado";
@@ -281,4 +282,5 @@ servidor.listen(Number(PORT), () => {
   iniciarPingClientes();
   iniciarMonitoreoRed();
   iniciarEncuestaVisitas();
+  iniciarMonitoreoNodos();
 });

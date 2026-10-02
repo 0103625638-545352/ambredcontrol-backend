@@ -17,6 +17,7 @@ import { leerRangoFechas, aClaveDia } from "../utils/rangoFechas";
 import { evaluarVisita, detectarAnomaliasCombustible, DISTANCIA_SOSPECHOSA_METROS } from "../utils/controlInterno";
 import { ventanaCicloActual, enPrimerCiclo, fechaLimitePago } from "../utils/gestionServicioInternet";
 import { registrarAuditoria } from "../utils/auditoria";
+import { calcularDisponibilidad } from "../utils/monitoreoNodos";
 
 export const centroControlRouter = Router();
 
@@ -48,7 +49,7 @@ centroControlRouter.get("/red/alertas", async (req: Request, res: Response) => {
     const soloAbiertas = req.query.estado !== "todas";
     const alertas = await prisma.alertaRed.findMany({
       where: soloAbiertas ? { fechaFin: null } : { fechaInicio: { gte: new Date(Date.now() - 30 * DIA_MS) } },
-      include: { olt: { select: { id: true, nombre: true } }, _count: { select: { tickets: true } } },
+      include: { olt: { select: { id: true, nombre: true } }, nodo: { select: { id: true, nombre: true, mikrotikHost: true } }, _count: { select: { tickets: true } } },
       orderBy: [{ fechaFin: { sort: "desc", nulls: "first" } }, { fechaInicio: "desc" }],
       take: 300,
     });
@@ -63,9 +64,17 @@ centroControlRouter.get("/red/alertas", async (req: Request, res: Response) => {
     const resultado = [];
     for (const a of alertas) {
       let clientesAfectados: { id: number; razonSocial: string; telefono: string | null; estadoOnu: string | null }[] = [];
-      if (a.tipo === "CORTE_MASIVO") {
+      if (a.tipo === "NODO_CAIDO" && a.nodoId) {
+        const delNodo = await prisma.cliente.findMany({
+          where: { nodoId: a.nodoId, activo: true },
+          select: { id: true, razonSocial: true, telefono: true, pingUltimoEstado: true },
+          orderBy: { razonSocial: "asc" },
+        });
+        clientesAfectados = delNodo.map((c) => ({ id: c.id, razonSocial: c.razonSocial, telefono: c.telefono, estadoOnu: c.pingUltimoEstado === "OK" ? "ONLINE" : "OFFLINE" }));
+      }
+      if (a.tipo === "CORTE_MASIVO" && a.oltId != null) {
         const delPuerto = await prisma.oltOnu.findMany({
-          where: { oltId: a.oltId, slot: a.slot, puerto: a.puerto, activo: true, clienteId: { not: null } },
+          where: { oltId: a.oltId, slot: a.slot ?? undefined, puerto: a.puerto ?? undefined, activo: true, clienteId: { not: null } },
           select: { estado: true, cliente: { select: { id: true, razonSocial: true, telefono: true } } },
         });
         clientesAfectados = delPuerto
@@ -78,6 +87,7 @@ centroControlRouter.get("/red/alertas", async (req: Request, res: Response) => {
         id: a.id,
         tipo: a.tipo,
         olt: a.olt,
+        nodo: a.nodo,
         slot: a.slot,
         puerto: a.puerto,
         cantidadAfectadas: a.cantidadAfectadas,
@@ -123,6 +133,66 @@ centroControlRouter.patch("/red/alertas/:id/cerrar", async (req: Request, res: R
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al cerrar la alerta" });
+  }
+});
+
+// GET /centro-control/red/disponibilidad-nodos?dias=30
+// Porcentaje de chequeos en línea de cada nodo en el período (cada pocos
+// minutos, ver jobs/monitoreoNodos.ts), cuántas caídas tuvo y cuánto tiempo
+// estuvo caído en total, más su estado actual.
+centroControlRouter.get("/red/disponibilidad-nodos", async (req: Request, res: Response) => {
+  try {
+    const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 90);
+    const desde = new Date(Date.now() - dias * DIA_MS);
+    const [nodos, conteos, alertas, clientesPorNodo] = await Promise.all([
+      prisma.nodoRed.findMany({ where: { activo: true }, select: { id: true, nombre: true, mikrotikHost: true, ultimaConexionExitosa: true }, orderBy: { nombre: "asc" } }),
+      prisma.chequeoNodo.groupBy({ by: ["nodoId", "enLinea"], where: { fecha: { gte: desde } }, _count: { _all: true }, _avg: { latenciaMs: true } }),
+      prisma.alertaRed.findMany({
+        where: { tipo: "NODO_CAIDO", OR: [{ fechaFin: null }, { fechaFin: { gte: desde } }] },
+        select: { nodoId: true, fechaInicio: true, fechaFin: true },
+      }),
+      prisma.cliente.groupBy({ by: ["nodoId"], where: { activo: true, nodoId: { not: null } }, _count: { _all: true } }),
+    ]);
+    const ultimos = await prisma.chequeoNodo.findMany({
+      where: { nodoId: { in: nodos.map((n) => n.id) } },
+      orderBy: { fecha: "desc" },
+      distinct: ["nodoId"],
+      select: { nodoId: true, enLinea: true, fecha: true, error: true },
+    });
+
+    const ahora = Date.now();
+    res.json(
+      nodos.map((n) => {
+        const ok = conteos.find((c) => c.nodoId === n.id && c.enLinea);
+        const fallos = conteos.find((c) => c.nodoId === n.id && !c.enLinea);
+        const enLinea = ok?._count._all ?? 0;
+        const total = enLinea + (fallos?._count._all ?? 0);
+        const suyas = alertas.filter((a) => a.nodoId === n.id);
+        const minutosCaido = suyas.reduce((s, a) => {
+          const inicio = Math.max(a.fechaInicio.getTime(), desde.getTime());
+          const fin = a.fechaFin ? a.fechaFin.getTime() : ahora;
+          return s + Math.max(0, fin - inicio) / 60_000;
+        }, 0);
+        const ultimo = ultimos.find((u) => u.nodoId === n.id);
+        return {
+          nodoId: n.id,
+          nombre: n.nombre,
+          host: n.mikrotikHost,
+          clientes: clientesPorNodo.find((c) => c.nodoId === n.id)?._count._all ?? 0,
+          disponibilidad: calcularDisponibilidad(enLinea, total),
+          chequeos: total,
+          latenciaPromedioMs: ok?._avg.latenciaMs != null ? Math.round(ok._avg.latenciaMs) : null,
+          caidas: suyas.length,
+          minutosCaido: Math.round(minutosCaido),
+          caidoAhora: suyas.some((a) => a.fechaFin === null),
+          ultimoChequeo: ultimo ? { enLinea: ultimo.enLinea, fecha: ultimo.fecha, error: ultimo.error } : null,
+          ultimaConexionExitosa: n.ultimaConexionExitosa,
+        };
+      })
+    );
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al calcular la disponibilidad de los nodos" });
   }
 });
 

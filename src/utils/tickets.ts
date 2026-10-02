@@ -45,6 +45,12 @@ export async function buscarClientePorTelefono(telefonoNormalizado: string): Pro
 // el ticket se vincula a esa alerta — quien atiende ve de inmediato que no
 // es un problema de esa casa, y al resolver el corte se cierran juntos.
 export async function alertaCorteDelCliente(clienteId: number): Promise<number | null> {
+  // Nodo (Mikrotik) caído: afecta a todo el sector, con o sin fibra/OLT.
+  const cliente = await prisma.cliente.findUnique({ where: { id: clienteId }, select: { nodoId: true } });
+  if (cliente?.nodoId) {
+    const nodoCaido = await prisma.alertaRed.findFirst({ where: { tipo: "NODO_CAIDO", nodoId: cliente.nodoId, fechaFin: null }, select: { id: true } });
+    if (nodoCaido) return nodoCaido.id;
+  }
   const onus = await prisma.oltOnu.findMany({ where: { clienteId, activo: true }, select: { oltId: true, slot: true, puerto: true } });
   for (const o of onus) {
     const alerta = await prisma.alertaRed.findFirst({

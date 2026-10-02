@@ -682,6 +682,10 @@ model NodoRed {
   olts          Olt[] // OLTs físicamente ubicadas/asociadas a este nodo, ver Olt (opcional)
   cajasFibra    CajaFibra[]
   tendidosFibra TendidoFibra[]
+
+  // Monitoreo de disponibilidad (ver utils/monitoreoNodos.ts).
+  chequeos   ChequeoNodo[]
+  alertasRed AlertaRed[]
 }
 
 // --- Módulo de RED FÍSICA (trazado de fibra) ---
@@ -2934,13 +2938,18 @@ model LecturaSenalOnu {
 // para el mismo puerto/ONU — así un corte no genera un aviso cada 5 minutos.
 model AlertaRed {
   id       Int    @id @default(autoincrement())
-  tipo     String // "CORTE_MASIVO" | "SENAL_DEGRADADA"
-  oltId    Int
-  olt      Olt    @relation(fields: [oltId], references: [id])
-  slot     Int
-  puerto   Int
+  tipo     String // "CORTE_MASIVO" | "SENAL_DEGRADADA" | "NODO_CAIDO"
+  // OLT/puerto: en CORTE_MASIVO y SENAL_DEGRADADA. null en NODO_CAIDO.
+  oltId    Int?
+  olt      Olt?   @relation(fields: [oltId], references: [id])
+  slot     Int?
+  puerto   Int?
   // Solo para SENAL_DEGRADADA (una ONU puntual); null en CORTE_MASIVO.
   oltOnuId Int?
+
+  // Solo en NODO_CAIDO: el nodo (Mikrotik) que dejó de responder.
+  nodoId Int?
+  nodo   NodoRed? @relation(fields: [nodoId], references: [id])
 
   cantidadAfectadas  Int       @default(1)
   mensaje            String
@@ -3055,4 +3064,21 @@ model EventoServicioInternet {
 
   @@index([clienteId, fecha])
   @@index([fecha])
+}
+
+// Un chequeo automático de conectividad con el Mikrotik de un nodo (ver
+// jobs/monitoreoNodos.ts, cada pocos minutos). Con esto se calcula la
+// disponibilidad real de cada nodo ("99,2% este mes") y se detecta una caída
+// aunque nadie tenga abierta la pantalla del Mikrotik. Se depuran los de más
+// de 90 días.
+model ChequeoNodo {
+  id         Int      @id @default(autoincrement())
+  nodoId     Int
+  nodo       NodoRed  @relation(fields: [nodoId], references: [id])
+  enLinea    Boolean
+  latenciaMs Int?
+  error      String?
+  fecha      DateTime @default(now())
+
+  @@index([nodoId, fecha])
 }
